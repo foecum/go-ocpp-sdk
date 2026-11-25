@@ -138,7 +138,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] `go.mod` with module path `github.com/foecum/go-ocpp-sdk`
 - [x] `README.md` stub, `LICENSE` (ask owner which), `.gitignore`
 - [x] CI: GitHub Actions running build, vet, `test -race`, staticcheck on push and PR
-- [ ] `docs/spec/README.md` listing which spec files are expected there
+- [x] `docs/spec/README.md` listing which spec files are expected there
 
 ### Phase 1 — Core (`ocpp`, `ocppj`)
 - [ ] `ocpp` package: `Request`, `Response`, `Feature` interfaces; version constants;
