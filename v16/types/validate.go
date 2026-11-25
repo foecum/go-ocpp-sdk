@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"unicode/utf8"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
@@ -107,6 +108,23 @@ func First(errs ...error) error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// CheckURI validates a URI field: if present it must be an
+// absolute URI (one with a scheme such as "ftp:" or "https:"), as the schemas'
+// "uri" format requires.
+func CheckURI(field, v string, required bool) error {
+	if v == "" {
+		if required {
+			return ocpp.Required(field)
+		}
+		return nil
+	}
+	u, err := url.Parse(v)
+	if err != nil || u.Scheme == "" {
+		return ocpp.Invalid(field, "must be an absolute URI")
 	}
 	return nil
 }

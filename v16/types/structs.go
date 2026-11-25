@@ -217,3 +217,25 @@ func (p ChargingProfile) Validate() error {
 	}
 	return nil
 }
+
+// AuthorizationData is one entry of a local authorisation list update, in
+// SendLocalList.
+type AuthorizationData struct {
+	// IDTag is the identifier the entry applies to (at most 20 characters).
+	IDTag string `json:"idTag" ocpp:"required"`
+	// IDTagInfo is the authorisation information. It is required in a Full
+	// update. In a Differential update, a present value adds or updates the
+	// entry and an absent one deletes it.
+	IDTagInfo *IDTagInfo `json:"idTagInfo,omitempty"`
+}
+
+// Validate checks the structure.
+func (a AuthorizationData) Validate() error {
+	if err := CheckString("idTag", a.IDTag, CiString20, true); err != nil {
+		return err
+	}
+	if a.IDTagInfo != nil {
+		return Prefix("idTagInfo", a.IDTagInfo.Validate())
+	}
+	return nil
+}

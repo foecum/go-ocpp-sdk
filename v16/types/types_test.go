@@ -330,3 +330,73 @@ func TestStructValidation(t *testing.T) {
 		bad("profile "+field, p.Validate(), field)
 	}
 }
+
+func TestProfileEnumsMatchSchemas(t *testing.T) {
+	tests := []struct {
+		name   string
+		valid  func(string) bool
+		schema string
+		path   []string
+	}{
+		{"DiagnosticsStatus", func(s string) bool { return types.DiagnosticsStatus(s).IsValid() }, "DiagnosticsStatusNotification", []string{"status"}},
+		{"FirmwareStatus", func(s string) bool { return types.FirmwareStatus(s).IsValid() }, "FirmwareStatusNotification", []string{"status"}},
+		{"UpdateType", func(s string) bool { return types.UpdateType(s).IsValid() }, "SendLocalList", []string{"updateType"}},
+		{"UpdateStatus", func(s string) bool { return types.UpdateStatus(s).IsValid() }, "SendLocalListResponse", []string{"status"}},
+		{"ReservationStatus", func(s string) bool { return types.ReservationStatus(s).IsValid() }, "ReserveNowResponse", []string{"status"}},
+		{"CancelReservationStatus", func(s string) bool { return types.CancelReservationStatus(s).IsValid() }, "CancelReservationResponse", []string{"status"}},
+		{"ChargingProfileStatus", func(s string) bool { return types.ChargingProfileStatus(s).IsValid() }, "SetChargingProfileResponse", []string{"status"}},
+		{"ClearChargingProfileStatus", func(s string) bool { return types.ClearChargingProfileStatus(s).IsValid() }, "ClearChargingProfileResponse", []string{"status"}},
+		{"GetCompositeScheduleStatus", func(s string) bool { return types.GetCompositeScheduleStatus(s).IsValid() }, "GetCompositeScheduleResponse", []string{"status"}},
+		{"MessageTrigger", func(s string) bool { return types.MessageTrigger(s).IsValid() }, "TriggerMessage", []string{"requestedMessage"}},
+		{"TriggerMessageStatus", func(s string) bool { return types.TriggerMessageStatus(s).IsValid() }, "TriggerMessageResponse", []string{"status"}},
+	}
+	for _, tt := range tests {
+		values := enumValues(t, tt.schema, tt.path...)
+		if len(values) == 0 {
+			t.Fatalf("%s: no values read from the schema", tt.name)
+		}
+		for _, v := range values {
+			if !tt.valid(v) {
+				t.Errorf("%s: %q should be valid", tt.name, v)
+			}
+		}
+		for _, bad := range []string{"", "Bogus", strings.ToLower(values[0]) + "x"} {
+			if tt.valid(bad) {
+				t.Errorf("%s: %q should be invalid", tt.name, bad)
+			}
+		}
+	}
+}
+
+func TestCheckURIAndAuthorizationData(t *testing.T) {
+	for _, ok := range []string{"ftp://host/dir", "https://fw.example.com/x.bin", "file:///tmp/x", "urn:isbn:1"} {
+		if err := types.CheckURI("u", ok, true); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	if err := types.CheckURI("u", "", false); err != nil {
+		t.Error(err)
+	}
+	if _, missing := validationField(t, types.CheckURI("u", "", true)); !missing {
+		t.Error("empty required URI is missing")
+	}
+	for _, bad := range []string{"not a uri", "/just/a/path", "host/path", "http://[::1", "%zz"} {
+		if _, missing := validationField(t, types.CheckURI("u", bad, true)); missing {
+			t.Errorf("%q: invalid, not missing", bad)
+		}
+	}
+
+	if err := (types.AuthorizationData{IDTag: "A"}).Validate(); err != nil {
+		t.Error(err)
+	}
+	info := &types.IDTagInfo{Status: types.AuthorizationStatusAccepted}
+	if err := (types.AuthorizationData{IDTag: "A", IDTagInfo: info}).Validate(); err != nil {
+		t.Error(err)
+	}
+	if f, _ := validationField(t, (types.AuthorizationData{}).Validate()); f != "idTag" {
+		t.Errorf("field %q", f)
+	}
+	if f, _ := validationField(t, (types.AuthorizationData{IDTag: "A", IDTagInfo: &types.IDTagInfo{}}).Validate()); f != "idTagInfo.status" {
+		t.Errorf("field %q", f)
+	}
+}
