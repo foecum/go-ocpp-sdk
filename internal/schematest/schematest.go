@@ -137,7 +137,7 @@ func check(t *testing.T, kind string, schema schemaDoc, decode decodeFunc, min, 
 			schemaErr := schema.valid(mutated)
 			_, oursErr := decode(action, mutated)
 			switch {
-			case m.lenient:
+			case m.lenient || allowed(m.name):
 				if oursErr != nil {
 					t.Errorf("%s: %s: unknown properties must be ignored, got %v\n%s", label, m.name, oursErr, mutated)
 				}
@@ -240,12 +240,26 @@ func propertyMutations(schema map[string]any, value any, path []any, out emit) {
 	case "integer":
 		set("wrong type (string instead of integer)", "abc")
 		set("fraction instead of integer", 1.5)
+		rangeMutations(schema, set)
 	case "number":
 		set("wrong type (string instead of number)", "abc")
+		rangeMutations(schema, set)
 	case "boolean":
 		set("wrong type (string instead of boolean)", "abc")
 	case "array":
 		set("wrong type (string instead of array)", "abc")
+		if min, ok := schema["minItems"].(float64); ok && min >= 1 {
+			set("array below minItems", []any{})
+		}
+		if max, ok := schema["maxItems"].(float64); ok {
+			if arr, ok := value.([]any); ok && len(arr) > 0 {
+				over := make([]any, int(max)+1)
+				for i := range over {
+					over[i] = arr[0]
+				}
+				set("array above maxItems", over)
+			}
+		}
 	case "object":
 		set("wrong type (string instead of object)", "abc")
 	}
@@ -324,7 +338,13 @@ func pathString(path []any) string {
 // NewRegistry returns a registry for OCPP 1.6 holding the given features.
 func NewRegistry(t testing.TB, features []ocpp.Feature) *ocppj.Registry {
 	t.Helper()
-	reg := ocppj.NewRegistry(ocpp.V16)
+	return NewRegistryFor(t, ocpp.V16, features)
+}
+
+// NewRegistryFor returns a registry for the given version holding the features.
+func NewRegistryFor(t testing.TB, version ocpp.Version, features []ocpp.Feature) *ocppj.Registry {
+	t.Helper()
+	reg := ocppj.NewRegistry(version)
 	for _, f := range features {
 		if err := reg.Register(f); err != nil {
 			t.Fatal(err)
@@ -338,13 +358,20 @@ func NewRegistry(t testing.TB, features []ocpp.Feature) *ocppj.Registry {
 // ("<Action>Request" and "<Action>Confirmation").
 func CheckActions(t testing.TB, features []ocpp.Feature) {
 	t.Helper()
+	CheckActionsSuffix(t, features, "Confirmation")
+}
+
+// CheckActionsSuffix is CheckActions for a version whose response types end in
+// the given suffix ("Confirmation" in OCPP 1.6, "Response" in 2.0.1).
+func CheckActionsSuffix(t testing.TB, features []ocpp.Feature, suffix string) {
+	t.Helper()
 	for _, f := range features {
 		req := reflect.New(f.RequestType()).Interface().(ocpp.Request)
 		resp := reflect.New(f.ResponseType()).Interface().(ocpp.Response)
 		if req.Action() != f.Action() || resp.Action() != f.Action() {
 			t.Errorf("%s: request reports %q, confirmation %q", f.Action(), req.Action(), resp.Action())
 		}
-		if f.RequestType().Name() != f.Action()+"Request" || f.ResponseType().Name() != f.Action()+"Confirmation" {
+		if f.RequestType().Name() != f.Action()+"Request" || f.ResponseType().Name() != f.Action()+suffix {
 			t.Errorf("%s: unexpected type names %s / %s", f.Action(), f.RequestType().Name(), f.ResponseType().Name())
 		}
 	}
@@ -379,4 +406,130 @@ func inlineRefs(node any, root map[string]any) any {
 		return out
 	}
 	return node
+}
+
+// RunGenerated is like Run, but derives the sample payloads from the schemas
+// themselves: for each action a minimal one (required properties only) and a
+// full one (every property). It is meant for the generated OCPP 2.0.1 messages,
+// where writing 128 samples by hand would be error-prone.
+func RunGenerated(t *testing.T, dir string, reg *ocppj.Registry, actions []string) {
+	t.Helper()
+	decodeReq := func(action string, payload []byte) (any, error) { return reg.DecodeRequest(action, payload) }
+	decodeResp := func(action string, payload []byte) (any, error) { return reg.DecodeResponse(action, payload) }
+	for _, action := range actions {
+		t.Run(action, func(t *testing.T) {
+			req := loadSchema(t, dir, action+"Request")
+			resp := loadSchema(t, dir, action+"Response")
+			check(t, "request", req, decodeReq, sampleJSON(t, req.raw, false), sampleJSON(t, req.raw, true), action)
+			check(t, "response", resp, decodeResp, sampleJSON(t, resp.raw, false), sampleJSON(t, resp.raw, true), action)
+		})
+	}
+}
+
+func sampleJSON(t *testing.T, schema map[string]any, full bool) string {
+	t.Helper()
+	b, err := json.Marshal(sampleValue(schema, full, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// sampleValue builds a value satisfying schema. With full set, optional
+// properties are included too.
+func sampleValue(schema map[string]any, full bool, name string) any {
+	if enum, ok := schema["enum"].([]any); ok && len(enum) > 0 {
+		if full {
+			return enum[len(enum)-1]
+		}
+		return enum[0]
+	}
+	switch schema["type"] {
+	case "string":
+		if schema["format"] == "date-time" {
+			if full {
+				return "2026-01-02T03:04:05.500Z"
+			}
+			return "2026-01-02T03:04:05Z"
+		}
+		n := 3
+		if max, ok := schema["maxLength"].(float64); ok && int(max) < n {
+			n = int(max)
+		}
+		return strings.Repeat("a", n)
+	case "integer":
+		return numberWithin(schema, 1)
+	case "number":
+		return numberWithin(schema, 1.5)
+	case "boolean":
+		return true
+	case "array":
+		items, _ := schema["items"].(map[string]any)
+		count := 1
+		if min, ok := schema["minItems"].(float64); ok && int(min) > count {
+			count = int(min)
+		}
+		out := make([]any, 0, count)
+		for i := 0; i < count; i++ {
+			out = append(out, sampleValue(items, full, name))
+		}
+		return out
+	case "object":
+		props, _ := schema["properties"].(map[string]any)
+		required := map[string]bool{}
+		if rs, ok := schema["required"].([]any); ok {
+			for _, r := range rs {
+				required[r.(string)] = true
+			}
+		}
+		obj := map[string]any{}
+		for key, p := range props {
+			if required[key] || full {
+				obj[key] = sampleValue(p.(map[string]any), full, key)
+			}
+		}
+		if name == "customData" && full {
+			obj["extension"] = 1.0 // customData accepts arbitrary extra properties
+		}
+		return obj
+	}
+	return map[string]any{"any": "json"} // a property without a type holds any JSON value
+}
+
+func numberWithin(schema map[string]any, preferred float64) float64 {
+	v := preferred
+	if min, ok := schema["minimum"].(float64); ok && v < min {
+		v = min
+	}
+	if max, ok := schema["maximum"].(float64); ok && v > max {
+		v = max
+	}
+	return v
+}
+
+// rangeMutations emits values just outside minimum and maximum.
+func rangeMutations(schema map[string]any, set func(name string, v any)) {
+	if min, ok := schema["minimum"].(float64); ok {
+		set("below minimum", min-1)
+	}
+	if max, ok := schema["maximum"].(float64); ok {
+		set("above maximum", max+1)
+	}
+}
+
+var allowedMutations []string
+
+// AllowMutation declares that the registry deliberately accepts the mutation
+// whose name ends with suffix although the schema rejects it, because the
+// specification text has precedence over the schema. Such mutations must be
+// accepted. Call it from a test before Run.
+func AllowMutation(suffix string) { allowedMutations = append(allowedMutations, suffix) }
+
+func allowed(name string) bool {
+	for _, suffix := range allowedMutations {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	return false
 }
