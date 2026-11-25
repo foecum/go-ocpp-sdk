@@ -111,8 +111,8 @@ e.g. `v16/core/boot_notification.go` holds `BootNotificationRequest`,
   timeouts, cancellation, disconnects, reconnects, queueing and ordering,
   authentication and TLS handling, and concurrent use. A change that drops any
   package below 95% is not done; add tests, never lower the threshold or exclude
-  code to pass it. Only `examples/` and packages with no statements (doc-only) are
-  exempt. `scripts/coverage.sh` enforces this and CI runs it.
+  code to pass it. Only `examples/`, the test-support package `internal/schematest`
+  and packages with no statements (doc-only) are exempt. `scripts/coverage.sh` enforces this and CI runs it.
 
 ## 5. Commands
 
@@ -184,7 +184,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
       concurrent connections
 
 ### Phase 3 — OCPP 1.6 types and Core profile
-- [ ] `v16/types`: IdTagInfo, AuthorizationStatus, MeterValue, SampledValue
+- [x] `v16/types`: IdTagInfo, AuthorizationStatus, MeterValue, SampledValue
       (+ Measurand, Phase, Location, Unit, ReadingContext, ValueFormat enums),
       ChargingProfile, ChargingSchedule, ChargingSchedulePeriod, KeyValue,
       ChargePointStatus, ChargePointErrorCode, DateTime
