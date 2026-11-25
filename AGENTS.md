@@ -188,12 +188,12 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
       (+ Measurand, Phase, Location, Unit, ReadingContext, ValueFormat enums),
       ChargingProfile, ChargingSchedule, ChargingSchedulePeriod, KeyValue,
       ChargePointStatus, ChargePointErrorCode, DateTime
-- [ ] `v16/core`: Authorize, BootNotification, ChangeAvailability,
+- [x] `v16/core`: Authorize, BootNotification, ChangeAvailability,
       ChangeConfiguration, ClearCache, DataTransfer, GetConfiguration, Heartbeat,
       MeterValues, RemoteStartTransaction, RemoteStopTransaction, Reset,
       StartTransaction, StatusNotification, StopTransaction, UnlockConnector
-- [ ] JSON round-trip test for every message using sample payloads
-- [ ] Validate generated JSON against the official 1.6 JSON schemas in tests
+- [x] JSON round-trip test for every message using sample payloads
+- [x] Validate generated JSON against the official 1.6 JSON schemas in tests
 
 ### Phase 4 — High-level API for 1.6
 - [ ] Post the API sketch for `chargepoint/v16` and `csms/v16` and wait for OK
@@ -286,6 +286,11 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — WebSocket library: `github.com/coder/websocket` (v1.8.15). Reasons: actively maintained (gorilla's last release was June 2024), context-aware reads/writes/pings/dials (our convention: `context.Context` first), safe concurrent writes (gorilla needs a manual write mutex), standard-library-only dependencies, built-in `Subprotocols` negotiation. Approved by the owner.
 - 2026-11-25 — Transport decisions: `ws.Server` is an `http.Handler`; version is chosen by the server's preference order among the client's offered subprotocols; a subprotocol mismatch completes the handshake without a subprotocol and then closes with 1002 (OCPP-J §3.2, same text in 1.6 and 2.0.1); a duplicate connection for the same ID replaces the old one (closed with 1008); ID rules: ≤48 chars, no `:` or `/`; unknown ID → 404, bad credentials → 401, failed certificate identity → 403; TLS ≥1.2 with the spec's GCM suites (plus ECDHE-RSA GCM); profile 3 requires subject CN == charge point ID and optionally O containing the operator name (A00.FR.404/405/511); WebSocket compression disabled; binary frames rejected; defaults: ping 30s, pong timeout 10s, read limit 1 MiB.
 - 2026-11-25 — `ws.Client` reconnects per OCPP-J §5.4 using the standard variable names (`WaitMinimum`, `RandomRange`, `RepeatTimes`); defaults 1s / 2s / 6 doublings when the config is the zero value. The wait is applied after every lost connection as well as after failed attempts; a missing common subprotocol is treated as a failed attempt and retried.
+- 2026-11-25 — 1.6 message types: Go-style field names (`IDTag`, `ConnectorID`, `TransactionID`, `IDTagInfo`) with the exact spec JSON tags; requests are `<Action>Request`, responses `<Action>Confirmation` (spec ".req"/".conf" naming). Optional strings/enums use the empty string for "absent" (`omitempty`); optional numbers and timestamps are pointers because zero is meaningful; required timestamps are a non-pointer `types.DateTime` whose zero value counts as missing.
+- 2026-11-25 — Required fields are marked `ocpp:"required"` and checked against the raw JSON by `ocppj.Registry` (at any depth), because Go cannot tell a missing int/enum from its zero value. `Validate()` then checks lengths, ranges, enums and cardinalities (e.g. `connectorId` ≥ 0 or > 0 as the spec says per message, `meterValue` 1..*, first charging period starts at 0, limits with at most one decimal, RemoteStartTransaction profile purpose must be TxProfile). These spec rules are stricter than the JSON schemas where the spec says so (precedence: errata → OCPP-J → spec → schema).
+- 2026-11-25 — Decoding is deliberately lenient about unknown properties (the schemas say `additionalProperties: false`): real charge points send extras and rejecting them would break interoperability. Everything else the schemas reject is rejected too; `internal/schematest` proves it with mutation tests against the official schemas.
+- 2026-11-25 — `types.DateTime` marshals UTC (whole seconds, or milliseconds when present) and accepts RFC 3339 with/without fractions, `Z` or offsets, and no zone (taken as UTC) — set by the owner. `Celcius` and `Celsius` are both valid `UnitOfMeasure` values (OCPP-J 1.6 errata 2025-04); the SDK sends whatever the caller sets.
+- 2026-11-25 — New test-only dependency: `github.com/santhosh-tekuri/jsonschema/v6` v6.0.3 (draft-04 support; pulls `golang.org/x/text`). Used only by `internal/schematest`; approved by the owner.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
@@ -293,6 +298,7 @@ Record each decision as: date — decision — reason.
 List anything not implemented or simplified, with a reason.
 
 - (none yet)
+- 1.6 string types: the specification restricts `CiString` and `String` to printable ASCII. Only lengths are enforced (schemas do the same), because real charge points send other characters. Revisit if strictness is wanted.
 - 1.6 security profiles: the OCPP 1.6 security whitepaper is not in `docs/spec/1.6/`, so profiles 1–3 are implemented from OCPP 2.0.1 part 2 §A00. The 1.6 Basic-auth password encoding differs from 2.0.1 (A00.FR.205 says so) and is not handled; the `BasicAuthenticator` lookup receives the raw password string. Revisit when the whitepaper is added.
 
 ## 10. Documentation site
