@@ -186,7 +186,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
 <div class="hero" id="top">
   <div class="hero-inner">
     <div>
-      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 1 of 10 complete</span>
+      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 2 of 10 complete</span>
       <h1>Talk <em>OCPP</em> from Go.</h1>
       <p class="lead">An SDK for the Open Charge Point Protocol, the language EV charging stations speak to their central system. Both roles, JSON over WebSocket, built on the standard library.</p>
       <div class="cta">
@@ -226,6 +226,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
     <a href="#install">Install</a>
     <a href="#concepts">Core concepts</a>
     <a href="#quickstart">Quick start</a>
+    <a href="#transport">WebSocket transport</a>
     <a href="#frames">Working with frames</a>
     <a href="#errors">Errors</a>
     <a href="#versions">Versions &amp; CALLERROR codes</a>
@@ -240,19 +241,20 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
       <div class="grid">
         <div class="card"><div class="ic">⚡</div><h3>Both roles</h3><p>One SDK for charging stations and for the central system that manages them.</p></div>
         <div class="card"><div class="ic">🔌</div><h3>OCPP-J only</h3><p>JSON over WebSocket. SOAP (OCPP-S) is intentionally not implemented.</p></div>
-        <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. Transport and message packages arrive in later phases.</p></div>
+        <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-alpha</strong>The OCPP 1.6 message types, WebSocket transport and the high-level <code>chargepoint</code> / <code>csms</code> APIs are not written yet. What exists today is the protocol core described below, and its API may still change.</div>
+      <div class="note warn"><strong>Pre-alpha</strong>The OCPP 1.6 message types and the high-level <code>chargepoint</code> / <code>csms</code> APIs are not written yet. What exists today is the protocol core (<code>ocpp</code>, <code>ocppj</code>) and the WebSocket transport (<code>ws</code>), described below. Their API may still change.</div>
     </section>
 
     <section id="install">
       <h2>Install</h2>
       <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go get github.com/foecum/go-ocpp-sdk@latest</code></pre></div>
-      <p>Requires a recent Go toolchain (the module targets Go 1.27). Import the root package and the framing package:</p>
+      <p>Requires a recent Go toolchain (the module targets Go 1.27). Import the root package, the framing package and the transport:</p>
       <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">import (
 	ocpp "github.com/foecum/go-ocpp-sdk"
 	"github.com/foecum/go-ocpp-sdk/ocppj"
+	"github.com/foecum/go-ocpp-sdk/ws"
 )</code></pre></div>
     </section>
 
@@ -265,8 +267,11 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <tr><td><code>ocppj.Registry</code></td><td><code>ocppj</code></td><td>The set of features for one OCPP version. Decodes and validates payloads.</td></tr>
         <tr><td><code>ocppj.Parse</code> / <code>Marshal</code></td><td><code>ocppj</code></td><td>Convert between wire frames and <code>Call</code>, <code>CallResult</code>, <code>CallError</code>.</td></tr>
         <tr><td><code>ocppj.Endpoint</code></td><td><code>ocppj</code></td><td>One side of a connection. Sends calls one at a time, matches replies, times out, and dispatches incoming calls to your handler.</td></tr>
+        <tr><td><code>ws.Server</code></td><td><code>ws</code></td><td>CSMS side of the transport: accepts charge points over WebSocket, authenticates them, negotiates the OCPP version.</td></tr>
+        <tr><td><code>ws.Client</code></td><td><code>ws</code></td><td>Charging station side: connects, keeps the connection up and reconnects with back-off.</td></tr>
+        <tr><td><code>ws.Conn</code></td><td><code>ws</code></td><td>One live connection. <code>Write</code> fits <code>ocppj.Config.Send</code>.</td></tr>
       </table></div>
-      <p>An <code>Endpoint</code> does no network I/O itself. The transport gives it a <code>Send</code> function and passes every received frame to <code>HandleFrame</code>. That keeps it independent of the WebSocket library, and makes it easy to test in memory.</p>
+      <p>An <code>Endpoint</code> does no network I/O itself. The transport gives it a <code>Send</code> function and passes every received frame to <code>HandleFrame</code>. That keeps it independent of the WebSocket library, and makes it easy to test in memory. The <code>ws</code> package is the real transport, shown next.</p>
     </section>
 
     <section id="quickstart">
@@ -367,6 +372,114 @@ func main() {
       </ul>
     </section>
 
+    <section id="transport">
+      <h2>WebSocket transport</h2>
+      <p>The <code>ws</code> package moves frames over a real WebSocket, for both roles, and plugs into <code>ocppj</code>. This example reuses the <code>PingRequest</code>, <code>PingResponse</code> and <code>newRegistry</code> from the quick start (add the imports <code>log</code>, <code>net</code>, <code>sync</code> and <code>ws</code>) and runs a CSMS and a charging station over a local socket.</p>
+      <div class="code"><div class="code-head"><span>main.go (continued)</span><button class="copy">Copy</button></div><pre><code class="lang-go">func main() {
+	// CSMS: one ocppj.Endpoint per connected charge point.
+	var mu sync.Mutex
+	endpoints := map[string]*ocppj.Endpoint{}
+	srv, err := ws.NewServer(ws.ServerConfig{
+		Versions: []ocpp.Version{ocpp.V201},
+		OnConnect: func(c *ws.Conn) {
+			ep, _ := ocppj.NewEndpoint(ocppj.Config{
+				Registry: newRegistry(),
+				Send:     c.Write,
+				Handler: func(ctx context.Context, req ocpp.Request) (ocpp.Response, error) {
+					return &amp;PingResponse{Reply: "pong from CSMS: " + req.(*PingRequest).Message}, nil
+				},
+			})
+			mu.Lock()
+			endpoints[c.ID()] = ep
+			mu.Unlock()
+		},
+		OnFrame: func(c *ws.Conn, frame []byte) {
+			mu.Lock()
+			ep := endpoints[c.ID()]
+			mu.Unlock()
+			ep.HandleFrame(frame)
+		},
+		OnDisconnect: func(c *ws.Conn, err error) {
+			mu.Lock()
+			ep := endpoints[c.ID()]
+			delete(endpoints, c.ID())
+			mu.Unlock()
+			ep.Close()
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go srv.Serve(ln)
+	defer srv.Shutdown(context.Background())
+
+	// Charging station: a Client that reconnects by itself.
+	var station *ocppj.Endpoint
+	ready := make(chan struct{}, 1)
+	client, err := ws.NewClient(ws.ClientConfig{
+		URL:      "ws://" + ln.Addr().String() + "/ocpp",
+		ID:       "CS001",
+		Versions: []ocpp.Version{ocpp.V201},
+		OnConnect: func(*ws.Conn) {
+			select {
+			case ready &lt;- struct{}{}:
+			default:
+			}
+		},
+		OnFrame: func(c *ws.Conn, frame []byte) { station.HandleFrame(frame) },
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	station, _ = ocppj.NewEndpoint(ocppj.Config{Registry: newRegistry(), Send: client.Send})
+	go client.Run(context.Background())
+	defer client.Close()
+
+	&lt;-ready
+	resp, err := station.Call(context.Background(), PingRequest{Message: "hello"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(resp.(*PingResponse).Reply) // pong from CSMS: hello
+}</code></pre></div>
+      <h3>Server</h3>
+      <ul>
+        <li><code>ws.Server</code> is an <code>http.Handler</code>, so you can mount it on any mux, or use <code>Serve</code> / <code>ListenAndServe</code>.</li>
+        <li>The charge point identity is the last path segment of the URL (percent-decoded). It must be 1 to 48 characters with no <code>:</code> or <code>/</code>, otherwise the handshake is answered with 400.</li>
+        <li>The OCPP version is chosen from the client's <code>Sec-WebSocket-Protocol</code> offer, in the order of <code>ServerConfig.Versions</code>. If nothing matches, the handshake completes without a subprotocol and the connection is closed with code 1002, as OCPP-J requires.</li>
+        <li><code>OnFrame</code> receives frames one at a time per connection, in order, so feeding <code>Endpoint.HandleFrame</code> directly is safe. Keep it quick: it holds up that connection's reads.</li>
+        <li>If a charge point connects again under the same identity, the old connection is closed (code 1008, <code>ws.ErrReplaced</code>) and the new one takes over.</li>
+        <li><code>Shutdown(ctx)</code> stops accepting, closes every connection with code 1001 and waits. If <code>ctx</code> ends first, the rest are cut.</li>
+        <li><code>Conn(id)</code> and <code>IDs()</code> look up and list connected charge points.</li>
+      </ul>
+      <h3>Client</h3>
+      <ul>
+        <li><code>Run(ctx)</code> connects, reconnects after any failure, and returns when <code>ctx</code> ends or <code>Close()</code> is called. <code>Send</code> returns <code>ocpp.ErrNotConnected</code> while disconnected.</li>
+        <li>Reconnecting follows OCPP-J §5.4. The first wait is <code>WaitMinimum</code> plus a random value up to <code>RandomRange</code>. The wait doubles after each failure, up to <code>RepeatTimes</code> times, and starts over after a success. Defaults: 1 s, 2 s and 6 doublings.</li>
+        <li>The identity is appended to <code>ClientConfig.URL</code>, so pass the endpoint URL (<code>wss://csms.example.com/ocpp</code>), not the full connection URL.</li>
+      </ul>
+      <h3>Keep-alive</h3>
+      <p>Both sides send WebSocket pings (every 30 s by default, <code>PingInterval</code>; negative disables) and close a connection whose peer does not answer within <code>PongTimeout</code> (10 s). <code>Conn.Err()</code> then reports <code>ws.ErrPingTimeout</code>. Messages larger than 1 MiB (<code>ReadLimit</code>) and binary frames are rejected.</p>
+      <h3>Security profiles</h3>
+      <div class="tablewrap"><table>
+        <tr><th>Profile</th><th>Server</th><th>Client</th></tr>
+        <tr><td>1: Basic auth, <code>ws://</code></td><td><code>Authenticator: ws.BasicAuthenticator(lookup)</code></td><td><code>Password</code></td></tr>
+        <tr><td>2: TLS + Basic auth</td><td>Profile 1, plus <code>TLSConfig: ws.ServerTLSConfig(cert, nil)</code></td><td><code>Password</code>, <code>TLSConfig: ws.ClientTLSConfig(rootCAs, nil)</code></td></tr>
+        <tr><td>3: TLS + client certificate</td><td><code>TLSConfig: ws.ServerTLSConfig(cert, clientCAs)</code> and <code>Authenticator: ws.ClientCertAuthenticator(opts)</code></td><td><code>TLSConfig: ws.ClientTLSConfig(rootCAs, &amp;clientCert)</code></td></tr>
+      </table></div>
+      <ul>
+        <li>With Basic auth the username is the charge point identity and the password is compared in constant time. The password is the raw UTF-8 string, as OCPP 2.0.1 specifies.</li>
+        <li>An unknown identity gets 404, bad credentials 401, and a certificate that does not match the identity 403.</li>
+        <li>Profile 3 requires the certificate's subject CN to equal the identity. Set <code>ClientCertOptions.Organization</code> to also require the operator name in the subject O, or <code>Identity</code> to use your own rule.</li>
+        <li>TLS 1.2 is the minimum, and only the AES-GCM suites the specification lists (plus the equivalent ECDHE-RSA ones) are enabled. The CSMS certificate is verified through its subjectAltName, as Go requires.</li>
+      </ul>
+      <div class="note warn"><strong>OCPP 1.6 note</strong>The 1.6 security whitepaper is not part of this repository's specs yet, so the profiles follow OCPP 2.0.1. The 1.6 Basic-auth password encoding differs from 2.0.1 and is not handled.</div>
+    </section>
+
     <section id="frames">
       <h2>Working with frames</h2>
       <p>Use <code>Parse</code> and <code>Marshal</code> directly if you only need the wire format:</p>
@@ -404,6 +517,11 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td><code>ocpp.ErrQueueFull</code></td><td>Too many calls are already waiting.</td></tr>
         <tr><td><code>ocpp.ErrClosed</code></td><td>The endpoint was closed.</td></tr>
         <tr><td><code>ocpp.ErrUnknownAction</code></td><td>No feature is registered for that action.</td></tr>
+        <tr><td><code>ws.ErrPingTimeout</code></td><td>The peer stopped answering WebSocket pings (see <code>Conn.Err()</code>).</td></tr>
+        <tr><td><code>ws.ErrReplaced</code></td><td>The same charge point connected again; this connection was closed.</td></tr>
+        <tr><td><code>ws.ErrNoSubprotocol</code></td><td>The CSMS did not agree to any OCPP version the client offered. The client keeps retrying.</td></tr>
+        <tr><td><code>ws.ErrInvalidID</code></td><td>A charge point identity is empty, over 48 characters, or contains <code>:</code> or <code>/</code>.</td></tr>
+        <tr><td><code>ws.ErrUnauthorized</code>, <code>ErrUnknownID</code>, <code>ErrForbidden</code></td><td>Returned by an <code>Authenticator</code> to answer the handshake with 401, 404 or 403.</td></tr>
       </table></div>
       <p>Handlers can return an <code>*ocpp.CallError</code> to choose the CALLERROR sent to the peer; any other error becomes <code>InternalError</code>. Invalid incoming payloads are answered automatically with the right code (<code>TypeConstraintViolation</code>, <code>PropertyConstraintViolation</code>, an occurrence violation for missing fields, or a format violation).</p>
     </section>
@@ -426,8 +544,8 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><th>Phase</th><th>Scope</th><th>State</th></tr>
         <tr><td>0</td><td>Project setup, CI</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>1</td><td>Core: <code>ocpp</code>, <code>ocppj</code> (framing, registry, call tracking)</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>2</td><td>WebSocket transport, security profiles 1–3</td><td><span class="badge b-next">Next</span></td></tr>
-        <tr><td>3</td><td>OCPP 1.6 types and Core profile messages</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>2</td><td>WebSocket transport <code>ws</code>, security profiles 1–3</td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>3</td><td>OCPP 1.6 types and Core profile messages</td><td><span class="badge b-next">Next</span></td></tr>
         <tr><td>4</td><td>High-level <code>chargepoint/v16</code> and <code>csms/v16</code></td><td><span class="badge b-plan">Planned</span></td></tr>
         <tr><td>5–6</td><td>Remaining 1.6 profiles, examples, v0.1.0</td><td><span class="badge b-plan">Planned</span></td></tr>
         <tr><td>7–8</td><td>1.6 security extension, OCPP 2.0.1</td><td><span class="badge b-plan">Planned</span></td></tr>
