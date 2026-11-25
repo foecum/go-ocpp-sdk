@@ -136,7 +136,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 
 ### Phase 0 — Setup
 - [x] `go.mod` with module path `github.com/foecum/go-ocpp-sdk`
-- [ ] `README.md` stub, `LICENSE` (ask owner which), `.gitignore`
+- [x] `README.md` stub, `LICENSE` (ask owner which), `.gitignore`
 - [ ] CI: GitHub Actions running build, vet, `test -race`, staticcheck on push and PR
 - [ ] `docs/spec/README.md` listing which spec files are expected there
 
@@ -259,6 +259,9 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 Record each decision as: date — decision — reason.
 
 - 2026-11-25 — Module path `github.com/foecum/go-ocpp-sdk`, root package `ocpp`.
+- 2026-11-25 — Licence: MIT — chosen by the owner.
+- 2026-11-25 — `go` directive follows the installed toolchain (1.27.2).
+- 2026-11-25 — CI runs staticcheck via `go run honnef.co/go/tools/cmd/staticcheck@latest`, so no module dependency is added.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
