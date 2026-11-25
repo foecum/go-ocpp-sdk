@@ -10,6 +10,9 @@ import (
 // The security schemas are draft-06 with definitions; the harness inlines the
 // references before breaking sample payloads.
 func TestAgainstOfficialSchemas(t *testing.T) {
+	// The whitepaper allows zero or more certificate hashes (0..*); the schema
+	// says at least one. The specification text wins.
+	schematest.AllowMutation("certificateHashData: array below minItems")
 	features := security.Features()
 	samples := buildSamples(t)
 	schematest.Run(t, "../../docs/spec/1.6/schemas/json", schematest.NewRegistry(t, features), samples)
