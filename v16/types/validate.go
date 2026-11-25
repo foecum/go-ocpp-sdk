@@ -17,6 +17,7 @@ const Unbounded = math.MaxInt
 const (
 	CiString20  = 20
 	CiString25  = 25
+	CiString40  = 40
 	CiString50  = 50
 	CiString255 = 255
 	CiString500 = 500
