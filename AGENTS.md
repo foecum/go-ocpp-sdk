@@ -210,12 +210,12 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Tests for timeout, disconnect mid-call, reconnect and resend
 
 ### Phase 5 — Remaining 1.6 profiles
-- [ ] Firmware Management: GetDiagnostics, DiagnosticsStatusNotification,
+- [x] Firmware Management: GetDiagnostics, DiagnosticsStatusNotification,
       FirmwareStatusNotification, UpdateFirmware
-- [ ] Local Auth List Management: GetLocalListVersion, SendLocalList
-- [ ] Reservation: ReserveNow, CancelReservation
-- [ ] Smart Charging: SetChargingProfile, ClearChargingProfile, GetCompositeSchedule
-- [ ] Remote Trigger: TriggerMessage
+- [x] Local Auth List Management: GetLocalListVersion, SendLocalList
+- [x] Reservation: ReserveNow, CancelReservation
+- [x] Smart Charging: SetChargingProfile, ClearChargingProfile, GetCompositeSchedule
+- [x] Remote Trigger: TriggerMessage
 - [ ] Wire all profiles into `chargepoint/v16` and `csms/v16`; tests for each
 
 ### Phase 6 — 1.6 examples and docs
