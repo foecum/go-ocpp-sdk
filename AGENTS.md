@@ -135,7 +135,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 ## 7. Roadmap
 
 ### Phase 0 — Setup
-- [ ] `go.mod` with module path `github.com/foecum/go-ocpp-sdk`
+- [x] `go.mod` with module path `github.com/foecum/go-ocpp-sdk`
 - [ ] `README.md` stub, `LICENSE` (ask owner which), `.gitignore`
 - [ ] CI: GitHub Actions running build, vet, `test -race`, staticcheck on push and PR
 - [ ] `docs/spec/README.md` listing which spec files are expected there
