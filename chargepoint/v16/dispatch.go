@@ -10,6 +10,7 @@ import (
 	"github.com/foecum/go-ocpp-sdk/v16/localauth"
 	"github.com/foecum/go-ocpp-sdk/v16/remotetrigger"
 	"github.com/foecum/go-ocpp-sdk/v16/reservation"
+	"github.com/foecum/go-ocpp-sdk/v16/security"
 	"github.com/foecum/go-ocpp-sdk/v16/smartcharging"
 )
 
@@ -93,6 +94,34 @@ func (c *ChargePoint) dispatch(ctx context.Context, req ocpp.Request) (ocpp.Resp
 		case *remotetrigger.TriggerMessageRequest:
 			if h := c.cfg.RemoteTrigger; h != nil {
 				return rpc.Return(h.TriggerMessage(ctx, r))
+			}
+		case *security.CertificateSignedRequest:
+			if h := c.cfg.Security; h != nil {
+				return rpc.Return(h.CertificateSigned(ctx, r))
+			}
+		case *security.DeleteCertificateRequest:
+			if h := c.cfg.Security; h != nil {
+				return rpc.Return(h.DeleteCertificate(ctx, r))
+			}
+		case *security.ExtendedTriggerMessageRequest:
+			if h := c.cfg.Security; h != nil {
+				return rpc.Return(h.ExtendedTriggerMessage(ctx, r))
+			}
+		case *security.GetInstalledCertificateIdsRequest:
+			if h := c.cfg.Security; h != nil {
+				return rpc.Return(h.GetInstalledCertificateIds(ctx, r))
+			}
+		case *security.GetLogRequest:
+			if h := c.cfg.Security; h != nil {
+				return rpc.Return(h.GetLog(ctx, r))
+			}
+		case *security.InstallCertificateRequest:
+			if h := c.cfg.Security; h != nil {
+				return rpc.Return(h.InstallCertificate(ctx, r))
+			}
+		case *security.SignedUpdateFirmwareRequest:
+			if h := c.cfg.Security; h != nil {
+				return rpc.Return(h.SignedUpdateFirmware(ctx, r))
 			}
 		}
 		// No handler for the profile, or a message the SDK knows but the

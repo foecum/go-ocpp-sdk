@@ -14,6 +14,7 @@ import (
 	"github.com/foecum/go-ocpp-sdk/v16"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
 	"github.com/foecum/go-ocpp-sdk/v16/firmware"
+	"github.com/foecum/go-ocpp-sdk/v16/security"
 	"github.com/foecum/go-ocpp-sdk/ws"
 )
 
@@ -52,6 +53,9 @@ type Config struct {
 	Reservation   ReservationHandler
 	SmartCharging SmartChargingHandler
 	RemoteTrigger RemoteTriggerHandler
+	// Security handles the security extension calls (certificates, logs, signed
+	// firmware). If nil, they are answered with NotSupported.
+	Security SecurityHandler
 	// CallTimeout is how long a call waits for the answer. Zero selects
 	// ocppj.DefaultTimeout (30 seconds).
 	CallTimeout time.Duration
@@ -244,4 +248,24 @@ func (c *ChargePoint) DiagnosticsStatusNotification(ctx context.Context, req fir
 // FirmwareStatusNotification reports the progress of a firmware update.
 func (c *ChargePoint) FirmwareStatusNotification(ctx context.Context, req firmware.FirmwareStatusNotificationRequest) (*firmware.FirmwareStatusNotificationConfirmation, error) {
 	return call[firmware.FirmwareStatusNotificationConfirmation](ctx, c, req)
+}
+
+// LogStatusNotification reports the progress of a log upload.
+func (c *ChargePoint) LogStatusNotification(ctx context.Context, req security.LogStatusNotificationRequest) (*security.LogStatusNotificationConfirmation, error) {
+	return call[security.LogStatusNotificationConfirmation](ctx, c, req)
+}
+
+// SecurityEventNotification reports a security event; critical ones (see security.IsCriticalEvent) should be pushed to the Central System.
+func (c *ChargePoint) SecurityEventNotification(ctx context.Context, req security.SecurityEventNotificationRequest) (*security.SecurityEventNotificationConfirmation, error) {
+	return call[security.SecurityEventNotificationConfirmation](ctx, c, req)
+}
+
+// SignCertificate asks the Central System to sign the charge point certificate request (CSR).
+func (c *ChargePoint) SignCertificate(ctx context.Context, req security.SignCertificateRequest) (*security.SignCertificateConfirmation, error) {
+	return call[security.SignCertificateConfirmation](ctx, c, req)
+}
+
+// SignedFirmwareStatusNotification reports the progress of a signed firmware update.
+func (c *ChargePoint) SignedFirmwareStatusNotification(ctx context.Context, req security.SignedFirmwareStatusNotificationRequest) (*security.SignedFirmwareStatusNotificationConfirmation, error) {
+	return call[security.SignedFirmwareStatusNotificationConfirmation](ctx, c, req)
 }
