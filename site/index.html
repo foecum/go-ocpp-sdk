@@ -186,7 +186,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
 <div class="hero" id="top">
   <div class="hero-inner">
     <div>
-      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 3 of 10 complete</span>
+      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 4 of 10 complete</span>
       <h1>Talk <em>OCPP</em> from Go.</h1>
       <p class="lead">An SDK for the Open Charge Point Protocol, the language EV charging stations speak to their central system. Both roles, JSON over WebSocket, built on the standard library.</p>
       <div class="cta">
@@ -226,6 +226,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
     <a href="#install">Install</a>
     <a href="#concepts">Core concepts</a>
     <a href="#quickstart">Quick start</a>
+    <a href="#highlevel">Central System &amp; Charge Point</a>
     <a href="#messages">OCPP 1.6 messages</a>
     <a href="#transport">WebSocket transport</a>
     <a href="#frames">Working with frames</a>
@@ -245,17 +246,19 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-alpha</strong>The protocol core (<code>ocpp</code>, <code>ocppj</code>), the WebSocket transport (<code>ws</code>) and the OCPP 1.6 Core profile messages (<code>v16</code>) exist and are described below. The high-level <code>chargepoint</code> / <code>csms</code> APIs and the other 1.6 profiles are not written yet, and the API may still change.</div>
+      <div class="note warn"><strong>Pre-alpha</strong>The protocol core (<code>ocpp</code>, <code>ocppj</code>), the WebSocket transport (<code>ws</code>), the OCPP 1.6 Core profile messages (<code>v16</code>) and the high-level <code>csms</code> and <code>chargepoint</code> APIs exist and are described below. The other 1.6 profiles, OCPP 2.0.1 and ready-made examples are still to come, and the API may still change.</div>
     </section>
 
     <section id="install">
       <h2>Install</h2>
       <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go get github.com/foecum/go-ocpp-sdk@latest</code></pre></div>
-      <p>Requires a recent Go toolchain (the module targets Go 1.27). Import the root package, the framing package and the transport:</p>
+      <p>Requires a recent Go toolchain (the module targets Go 1.27). Most applications need these packages (the lower-level <code>ocppj</code> and <code>ws</code> are described later):</p>
       <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">import (
 	ocpp "github.com/foecum/go-ocpp-sdk"
-	"github.com/foecum/go-ocpp-sdk/ocppj"
-	"github.com/foecum/go-ocpp-sdk/ws"
+	"github.com/foecum/go-ocpp-sdk/chargepoint/v16" // package chargepoint
+	"github.com/foecum/go-ocpp-sdk/csms/v16"        // package csms
+	"github.com/foecum/go-ocpp-sdk/v16/core"
+	"github.com/foecum/go-ocpp-sdk/v16/types"
 )</code></pre></div>
     </section>
 
@@ -268,6 +271,8 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <tr><td><code>ocppj.Registry</code></td><td><code>ocppj</code></td><td>The set of features for one OCPP version. Decodes and validates payloads.</td></tr>
         <tr><td><code>ocppj.Parse</code> / <code>Marshal</code></td><td><code>ocppj</code></td><td>Convert between wire frames and <code>Call</code>, <code>CallResult</code>, <code>CallError</code>.</td></tr>
         <tr><td><code>ocppj.Endpoint</code></td><td><code>ocppj</code></td><td>One side of a connection. Sends calls one at a time, matches replies, times out, and dispatches incoming calls to your handler.</td></tr>
+        <tr><td><code>csms.New</code></td><td><code>csms</code></td><td>The Central System: accepts charge points, dispatches their calls to your handler, and lets you call them back.</td></tr>
+        <tr><td><code>chargepoint.New</code></td><td><code>chargepoint</code></td><td>The charging station: connects, reconnects, sends typed calls, and answers the Central System through your handler.</td></tr>
         <tr><td><code>v16.NewRegistry</code></td><td><code>v16</code></td><td>A registry with every implemented OCPP 1.6 message.</td></tr>
         <tr><td><code>core.BootNotificationRequest</code> …</td><td><code>v16/core</code></td><td>The typed 1.6 Core messages. Shared types and enums are in <code>v16/types</code>.</td></tr>
         <tr><td><code>ws.Server</code></td><td><code>ws</code></td><td>CSMS side of the transport: accepts charge points over WebSocket, authenticates them, negotiates the OCPP version.</td></tr>
@@ -279,7 +284,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
 
     <section id="quickstart">
       <h2>Quick start</h2>
-      <p>This runs a charging station and a CSMS in one process, joined back to back, and exchanges a real OCPP 1.6 <code>BootNotification</code>. Nothing here touches the network; the next sections add the WebSocket transport.</p>
+      <p>This runs a Central System and a charging station in one process, over a real WebSocket on a local port. The station boots, then the Central System resets it.</p>
       <div class="code"><div class="code-head"><span>main.go</span><button class="copy">Copy</button></div><pre><code class="lang-go">package main
 
 import (
@@ -287,79 +292,165 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
-	"github.com/foecum/go-ocpp-sdk/ocppj"
-	"github.com/foecum/go-ocpp-sdk/v16"
+	"github.com/foecum/go-ocpp-sdk/chargepoint/v16"
+	"github.com/foecum/go-ocpp-sdk/csms/v16"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
 	"github.com/foecum/go-ocpp-sdk/v16/types"
 )
 
-// newEndpoint creates an OCPP 1.6 endpoint whose frames go to *peer.
-func newEndpoint(peer **ocppj.Endpoint, handler ocppj.RequestHandler) *ocppj.Endpoint {
-	reg, err := v16.NewRegistry() // every implemented 1.6 message
-	if err != nil {
-		log.Fatal(err)
-	}
-	ep, err := ocppj.NewEndpoint(ocppj.Config{
-		Registry: reg,
-		Handler:  handler,
-		Send: func(ctx context.Context, frame []byte) error {
-			(*peer).HandleFrame(frame) // a real transport writes to the socket
-			return nil
-		},
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	return ep
+// The Central System answers BootNotification and leaves everything else to
+// the embedded handler, which replies NotSupported.
+type csmsHandler struct{ csms.UnimplementedCoreHandler }
+
+func (csmsHandler) BootNotification(ctx context.Context, cp *csms.ChargePoint,
+	req *core.BootNotificationRequest) (*core.BootNotificationConfirmation, error) {
+	fmt.Println("boot from", cp.ID(), "-", req.ChargePointVendor, req.ChargePointModel)
+	return &amp;core.BootNotificationConfirmation{
+		Status:      types.RegistrationStatusAccepted,
+		CurrentTime: types.Now(),
+		Interval:    300,
+	}, nil
+}
+
+// The charging station answers Reset.
+type stationHandler struct{ chargepoint.UnimplementedCoreHandler }
+
+func (stationHandler) Reset(ctx context.Context, req *core.ResetRequest) (*core.ResetConfirmation, error) {
+	fmt.Println("reset requested:", req.Type)
+	return &amp;core.ResetConfirmation{Status: types.ResetStatusAccepted}, nil
 }
 
 func main() {
-	var station, csms *ocppj.Endpoint
+	ctx := context.Background()
 
-	station = newEndpoint(&amp;csms, nil)
-	csms = newEndpoint(&amp;station, func(ctx context.Context, req ocpp.Request) (ocpp.Response, error) {
-		switch r := req.(type) {
-		case *core.BootNotificationRequest:
-			fmt.Println("boot from", r.ChargePointVendor, r.ChargePointModel)
-			return &amp;core.BootNotificationConfirmation{
-				Status:      types.RegistrationStatusAccepted,
-				CurrentTime: types.Now(),
-				Interval:    300,
-			}, nil
-		case *core.HeartbeatRequest:
-			return &amp;core.HeartbeatConfirmation{CurrentTime: types.Now()}, nil
-		}
-		return nil, &amp;ocpp.CallError{Code: ocpp.NotSupported, Description: req.Action() + " is not supported"}
+	// Central System: an http.Handler, here served on a local port.
+	srv, err := csms.New(csms.Config{Core: csmsHandler{}})
+	if err != nil {
+		log.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go srv.Serve(ln)
+	defer srv.Shutdown(ctx)
+
+	// Charging station: connects, and reconnects by itself if the link drops.
+	station, err := chargepoint.New(chargepoint.Config{
+		URL:  "ws://" + ln.Addr().String() + "/ocpp",
+		ID:   "CS001",
+		Core: stationHandler{},
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	go station.Run(ctx)
 	defer station.Close()
-	defer csms.Close()
+	if err := station.WaitConnected(ctx); err != nil {
+		log.Fatal(err)
+	}
 
-	resp, err := station.Call(context.Background(), core.BootNotificationRequest{
+	// Station -&gt; Central System.
+	boot, err := station.BootNotification(ctx, core.BootNotificationRequest{
 		ChargePointVendor: "Acme",
 		ChargePointModel:  "X1",
 	})
 	var callErr *ocpp.CallError
 	switch {
-	case errors.Is(err, ocpp.ErrTimeout):
-		log.Fatal("no answer")
+	case errors.Is(err, ocpp.ErrNotConnected), errors.Is(err, ocpp.ErrTimeout):
+		log.Fatal("no answer: ", err)
 	case errors.As(err, &amp;callErr):
-		log.Fatalf("peer said %s", callErr.Code)
+		log.Fatalf("the Central System answered %s", callErr.Code)
 	case err != nil:
-		log.Fatal(err) // includes validation errors, caught before sending
+		log.Fatal(err)
 	}
-	boot := resp.(*core.BootNotificationConfirmation)
 	fmt.Println(boot.Status, "- heartbeat every", boot.Interval, "s")
+
+	// Central System -&gt; station.
+	cp, ok := srv.ChargePoint("CS001")
+	if !ok {
+		log.Fatal("CS001 is not connected")
+	}
+	reset, err := cp.Reset(ctx, core.ResetRequest{Type: types.ResetTypeSoft})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("reset:", reset.Status)
 }</code></pre></div>
       <h3>How a call behaves</h3>
       <ul>
         <li>Only <strong>one CALL is outstanding</strong> per direction; further calls from other goroutines wait in a queue (default 1000, then <code>ocpp.ErrQueueFull</code>).</li>
-        <li>The response timeout defaults to <strong>30 s</strong>, counted from when the call is sent. Set <code>Config.Timeout</code> to change it.</li>
+        <li>The response timeout defaults to <strong>30 s</strong>, counted from when the call is sent. Set <code>CallTimeout</code> to change it.</li>
         <li>If your <code>context</code> ends, <code>Call</code> returns <code>ctx.Err()</code> and the next queued call proceeds.</li>
         <li>Incoming calls run in their own goroutine, so a handler may itself call the peer.</li>
         <li>With no <code>Handler</code>, or for an action the registry doesn't know, the peer receives a <code>NotImplemented</code> CALLERROR.</li>
         <li><code>Close()</code> fails everything pending with <code>ocpp.ErrClosed</code>, cancels running handlers and waits for them.</li>
+      </ul>
+    </section>
+
+    <section id="highlevel">
+      <h2>Central System and Charge Point</h2>
+      <p>Two packages hide the framing, registries and connections. They are <code>csms</code> (import path <code>.../csms/v16</code>) and <code>chargepoint</code> (<code>.../chargepoint/v16</code>).</p>
+      <h3>Central System: <code>csms.New</code></h3>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">srv, err := csms.New(csms.Config{
+	Core:          myHandler,                 // answers charge point calls
+	Authenticator: ws.BasicAuthenticator(lookupPassword),
+	OnConnect:     func(cp *csms.ChargePoint) {},
+	OnDisconnect:  func(cp *csms.ChargePoint, err error) {},
+})
+log.Fatal(http.ListenAndServe(":8080", srv)) // the CSMS is an http.Handler
+// or srv.ListenAndServe(":8080") / srv.Serve(listener), then srv.Shutdown(ctx)
+
+cp, ok := srv.ChargePoint("CS001") // the live connection, if any
+ids := srv.ChargePoints()          // connected identities, sorted</code></pre></div>
+      <ul>
+        <li>Charge points connect to <code>ws://host/ocpp/&lt;identity&gt;</code>: the identity is the last path segment of the URL.</li>
+        <li><code>cp.ChangeAvailability</code>, <code>ChangeConfiguration</code>, <code>ClearCache</code>, <code>DataTransfer</code>, <code>GetConfiguration</code>, <code>RemoteStartTransaction</code>, <code>RemoteStopTransaction</code>, <code>Reset</code> and <code>UnlockConnector</code> call the charge point. Each takes a <code>core.XRequest</code> by value and returns <code>*core.XConfirmation</code>.</li>
+        <li>A <code>*csms.ChargePoint</code> belongs to one connection. If the station reconnects, look it up again; the old value fails with <code>ocpp.ErrNotConnected</code>. <code>cp.Close()</code> drops the connection.</li>
+        <li>Handlers receive the <code>*csms.ChargePoint</code>, so they can call the station back while handling its request.</li>
+        <li>Other options: <code>TLSConfig</code> (wss, see the security profiles below), <code>CallTimeout</code>, <code>PingInterval</code>, <code>PongTimeout</code>, <code>ReadLimit</code> and <code>Logger</code>.</li>
+      </ul>
+      <h3>Charging station: <code>chargepoint.New</code></h3>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">cp, err := chargepoint.New(chargepoint.Config{
+	URL:      "wss://csms.example.com/ocpp",
+	ID:       "CS001",
+	Password: "…",                          // HTTP Basic auth (profiles 1 and 2)
+	Core:     myHandler,                    // answers Central System calls
+	OnConnect:    func() {},
+	OnDisconnect: func(err error) {},
+})
+go cp.Run(ctx)             // connects, reconnects with back-off; Close() stops it
+err = cp.WaitConnected(ctx)</code></pre></div>
+      <ul>
+        <li><code>Authorize</code>, <code>BootNotification</code>, <code>DataTransfer</code>, <code>Heartbeat</code>, <code>MeterValues</code>, <code>StartTransaction</code>, <code>StatusNotification</code> and <code>StopTransaction</code> call the Central System.</li>
+        <li>The station never sends <code>BootNotification</code> or <code>Heartbeat</code> by itself. Send a BootNotification after each start, and Heartbeats at the interval the Central System returns.</li>
+        <li><code>Connected()</code> and <code>WaitConnected(ctx)</code> tell you whether the link is up. Other options: <code>Reconnect</code> (see below), <code>TLSConfig</code>, <code>CallTimeout</code>, <code>PingInterval</code>, <code>PongTimeout</code>, <code>ReadLimit</code> and <code>Logger</code>.</li>
+      </ul>
+      <h3>Writing handlers</h3>
+      <p>A handler implements <code>csms.CoreHandler</code> or <code>chargepoint.CoreHandler</code>. Embed the matching <code>Unimplemented</code> struct to implement only some methods:</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">type handler struct{ chargepoint.UnimplementedCoreHandler }
+
+func (handler) Reset(ctx context.Context, req *core.ResetRequest) (*core.ResetConfirmation, error) {
+	return &amp;core.ResetConfirmation{Status: types.ResetStatusAccepted}, nil
+}</code></pre></div>
+      <div class="tablewrap"><table>
+        <tr><th>Situation</th><th>What the peer receives</th></tr>
+        <tr><td>No handler set, or a method left to the embedded <code>Unimplemented</code> struct</td><td><code>NotSupported</code></td></tr>
+        <tr><td>An action the SDK does not know</td><td><code>NotImplemented</code></td></tr>
+        <tr><td>A known message that is not meant for this side (for example a station sent <code>ChangeAvailability</code>)</td><td><code>NotSupported</code></td></tr>
+        <tr><td>An invalid payload (missing field, wrong type, bad value)</td><td>The matching <code>OccurenceConstraintViolation</code>, <code>TypeConstraintViolation</code> or <code>PropertyConstraintViolation</code></td></tr>
+        <tr><td>The handler returns a <code>*ocpp.CallError</code></td><td>That error, with its code, description and details</td></tr>
+        <tr><td>The handler returns any other error, returns nothing, or panics</td><td><code>InternalError</code> (the error text is not sent); the program keeps running</td></tr>
+      </table></div>
+      <h3>When the connection is down</h3>
+      <ul>
+        <li>A call made while disconnected fails at once with an error matching <code>ocpp.ErrNotConnected</code>. Nothing is queued or retried for you.</li>
+        <li>A call that was waiting for its answer when the connection dropped also returns <code>ocpp.ErrNotConnected</code> straight away, not after the timeout. The other side may or may not have processed it, so only resend what is safe to repeat.</li>
+        <li>OCPP 1.6 requires a station to keep and retry transaction messages (<code>StartTransaction</code>, <code>StopTransaction</code>, <code>MeterValues</code>). Build that on <code>Connected()</code> and <code>WaitConnected()</code>; a ready-made opt-in retry helper is planned.</li>
+        <li>The station reconnects by itself using the back-off from the WebSocket section: <code>Reconnect: ws.Reconnect{WaitMinimum: …, RandomRange: …, RepeatTimes: …}</code>, or leave it zero for the defaults.</li>
       </ul>
     </section>
 
@@ -423,7 +514,7 @@ fmt.Println(bad.Validate()) // ocpp: invalid field "connectorId": must be at lea
 
     <section id="transport">
       <h2>WebSocket transport</h2>
-      <p>The <code>ws</code> package moves frames over a real WebSocket, for both roles, and plugs into <code>ocppj</code>. This is a complete program: it runs a CSMS and a charging station over a local socket and registers the charge point with a <code>BootNotification</code>.</p>
+      <p>The <code>csms</code> and <code>chargepoint</code> packages use this layer for you. Use it directly to build something different. The <code>ws</code> package moves frames over a real WebSocket, for both roles, and plugs into <code>ocppj</code>. This is a complete program: it runs a CSMS and a charging station over a local socket and registers the charge point with a <code>BootNotification</code>.</p>
       <div class="code"><div class="code-head"><span>main.go</span><button class="copy">Copy</button></div><pre><code class="lang-go">package main
 
 import (
@@ -561,6 +652,82 @@ func main() {
 
     <section id="frames">
       <h2>Working with frames</h2>
+      <h3>Endpoints without a transport</h3>
+      <p>An <code>ocppj.Endpoint</code> does no I/O: you give it a <code>Send</code> function and feed it received frames. This program joins two endpoints back to back and needs no network at all, which makes it handy for tests.</p>
+      <div class="code"><div class="code-head"><span>main.go</span><button class="copy">Copy</button></div><pre><code class="lang-go">package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+
+	ocpp "github.com/foecum/go-ocpp-sdk"
+	"github.com/foecum/go-ocpp-sdk/ocppj"
+	"github.com/foecum/go-ocpp-sdk/v16"
+	"github.com/foecum/go-ocpp-sdk/v16/core"
+	"github.com/foecum/go-ocpp-sdk/v16/types"
+)
+
+// newEndpoint creates an OCPP 1.6 endpoint whose frames go to *peer.
+func newEndpoint(peer **ocppj.Endpoint, handler ocppj.RequestHandler) *ocppj.Endpoint {
+	reg, err := v16.NewRegistry() // every implemented 1.6 message
+	if err != nil {
+		log.Fatal(err)
+	}
+	ep, err := ocppj.NewEndpoint(ocppj.Config{
+		Registry: reg,
+		Handler:  handler,
+		Send: func(ctx context.Context, frame []byte) error {
+			(*peer).HandleFrame(frame) // a real transport writes to the socket
+			return nil
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return ep
+}
+
+func main() {
+	var station, csms *ocppj.Endpoint
+
+	station = newEndpoint(&amp;csms, nil)
+	csms = newEndpoint(&amp;station, func(ctx context.Context, req ocpp.Request) (ocpp.Response, error) {
+		switch r := req.(type) {
+		case *core.BootNotificationRequest:
+			fmt.Println("boot from", r.ChargePointVendor, r.ChargePointModel)
+			return &amp;core.BootNotificationConfirmation{
+				Status:      types.RegistrationStatusAccepted,
+				CurrentTime: types.Now(),
+				Interval:    300,
+			}, nil
+		case *core.HeartbeatRequest:
+			return &amp;core.HeartbeatConfirmation{CurrentTime: types.Now()}, nil
+		}
+		return nil, &amp;ocpp.CallError{Code: ocpp.NotSupported, Description: req.Action() + " is not supported"}
+	})
+	defer station.Close()
+	defer csms.Close()
+
+	resp, err := station.Call(context.Background(), core.BootNotificationRequest{
+		ChargePointVendor: "Acme",
+		ChargePointModel:  "X1",
+	})
+	var callErr *ocpp.CallError
+	switch {
+	case errors.Is(err, ocpp.ErrTimeout):
+		log.Fatal("no answer")
+	case errors.As(err, &amp;callErr):
+		log.Fatalf("peer said %s", callErr.Code)
+	case err != nil:
+		log.Fatal(err) // includes validation errors, caught before sending
+	}
+	boot := resp.(*core.BootNotificationConfirmation)
+	fmt.Println(boot.Status, "- heartbeat every", boot.Interval, "s")
+}</code></pre></div>
+      <h3>Frames</h3>
+      
       <p>Use <code>Parse</code> and <code>Marshal</code> directly if you only need the wire format:</p>
       <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">msg, err := ocppj.Parse(ocpp.V16, []byte(`[2,"19223201","Heartbeat",{}]`))
 if err != nil {
@@ -590,7 +757,7 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
       <div class="tablewrap"><table>
         <tr><th>Error</th><th>Meaning</th></tr>
         <tr><td><code>ocpp.ErrTimeout</code></td><td>No response arrived in time.</td></tr>
-        <tr><td><code>ocpp.ErrNotConnected</code></td><td>There is no connection to send on (returned by transports).</td></tr>
+        <tr><td><code>ocpp.ErrNotConnected</code></td><td>There is no connection to send on, or it closed while the call waited for its answer.</td></tr>
         <tr><td><code>ocpp.ErrValidation</code></td><td>A message failed validation. <code>*ocpp.ValidationError</code> names the field and whether it is missing.</td></tr>
         <tr><td><code>ocpp.ErrCallError</code></td><td>The peer replied with a CALLERROR. Use <code>errors.As</code> with <code>*ocpp.CallError</code> for the code, description and details.</td></tr>
         <tr><td><code>ocpp.ErrQueueFull</code></td><td>Too many calls are already waiting.</td></tr>
@@ -625,8 +792,8 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>1</td><td>Core: <code>ocpp</code>, <code>ocppj</code> (framing, registry, call tracking)</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>2</td><td>WebSocket transport <code>ws</code>, security profiles 1–3</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>3</td><td>OCPP 1.6 types and Core profile messages</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>4</td><td>High-level <code>chargepoint/v16</code> and <code>csms/v16</code></td><td><span class="badge b-next">Next</span></td></tr>
-        <tr><td>5–6</td><td>Remaining 1.6 profiles, examples, v0.1.0</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>4</td><td>High-level <code>chargepoint/v16</code> and <code>csms/v16</code></td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>5–6</td><td>Remaining 1.6 profiles, examples, v0.1.0</td><td><span class="badge b-next">Next</span></td></tr>
         <tr><td>7–8</td><td>1.6 security extension, OCPP 2.0.1</td><td><span class="badge b-plan">Planned</span></td></tr>
         <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
       </table></div>

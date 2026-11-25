@@ -196,18 +196,18 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Validate generated JSON against the official 1.6 JSON schemas in tests
 
 ### Phase 4 — High-level API for 1.6
-- [ ] Post the API sketch for `chargepoint/v16` and `csms/v16` and wait for OK
-- [ ] `chargepoint/v16`: typed methods for CP-initiated calls
+- [x] Post the API sketch for `chargepoint/v16` and `csms/v16` and wait for OK
+- [x] `chargepoint/v16`: typed methods for CP-initiated calls
       (e.g. `BootNotification(ctx, req) (*core.BootNotificationConfirmation, error)`)
       and handler interfaces for CSMS-initiated calls
-- [ ] `csms/v16`: typed handlers for CP-initiated calls; typed methods to send
+- [x] `csms/v16`: typed handlers for CP-initiated calls; typed methods to send
       calls to a charge point by ID; list connected charge points
-- [ ] Unhandled action → CALLERROR `NotImplemented`; registered profile with no
+- [x] Unhandled action → CALLERROR `NotImplemented`; registered profile with no
       handler → `NotSupported`
-- [ ] Integration test (in-process): BootNotification → StatusNotification →
+- [x] Integration test (in-process): BootNotification → StatusNotification →
       Authorize → StartTransaction → MeterValues → StopTransaction,
       plus RemoteStartTransaction and Reset from the CSMS
-- [ ] Tests for timeout, disconnect mid-call, reconnect and resend
+- [x] Tests for timeout, disconnect mid-call, reconnect and resend
 
 ### Phase 5 — Remaining 1.6 profiles
 - [ ] Firmware Management: GetDiagnostics, DiagnosticsStatusNotification,
@@ -291,6 +291,9 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Decoding is deliberately lenient about unknown properties (the schemas say `additionalProperties: false`): real charge points send extras and rejecting them would break interoperability. Everything else the schemas reject is rejected too; `internal/schematest` proves it with mutation tests against the official schemas.
 - 2026-11-25 — `types.DateTime` marshals UTC (whole seconds, or milliseconds when present) and accepts RFC 3339 with/without fractions, `Z` or offsets, and no zone (taken as UTC) — set by the owner. `Celcius` and `Celsius` are both valid `UnitOfMeasure` values (OCPP-J 1.6 errata 2025-04); the SDK sends whatever the caller sets.
 - 2026-11-25 — New test-only dependency: `github.com/santhosh-tekuri/jsonschema/v6` v6.0.3 (draft-04 support; pulls `golang.org/x/text`). Used only by `internal/schematest`; approved by the owner.
+- 2026-11-25 — High-level API (approved by the owner): packages `csms/v16` and `chargepoint/v16` are named `csms` and `chargepoint`; handlers are one interface per profile (`CoreHandler`) with embeddable `Unimplemented...` structs that answer `NotSupported`; a nil profile handler also answers `NotSupported`, an action the SDK does not know answers `NotImplemented`. CSMS handlers receive the `*csms.ChargePoint` so they can call the station back; outbound requests are passed by value, inbound ones by pointer. A `*csms.ChargePoint` is tied to one connection. A panicking handler is answered with `InternalError`; handler error text is never sent to the peer (only `*ocpp.CallError` is passed through).
+- 2026-11-25 — Offline behaviour (approved by the owner): calls fail fast with `ocpp.ErrNotConnected` (also for a call interrupted by a lost connection) and nothing is queued or retried by the SDK; the station never sends BootNotification or Heartbeat on its own. An opt-in retry helper for transaction messages (1.6 `TransactionMessageAttempts` / `TransactionMessageRetryInterval`) is planned for later.
+- 2026-11-25 — Shared helpers for the two packages live in `internal/rpc`. Construction seams (`newRegistry`, `newEndpoint`, `newWSServer`) are package variables that tests replace to reach error paths that cannot occur otherwise.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
@@ -298,6 +301,7 @@ Record each decision as: date — decision — reason.
 List anything not implemented or simplified, with a reason.
 
 - (none yet)
+- Opt-in retry/queue helper for transaction messages (StartTransaction, StopTransaction, MeterValues) per the 1.6 configuration keys: not implemented; the owner wants it added later (it needs persistence decisions).
 - 1.6 string types: the specification restricts `CiString` and `String` to printable ASCII. Only lengths are enforced (schemas do the same), because real charge points send other characters. Revisit if strictness is wanted.
 - 1.6 security profiles: the OCPP 1.6 security whitepaper is not in `docs/spec/1.6/`, so profiles 1–3 are implemented from OCPP 2.0.1 part 2 §A00. The 1.6 Basic-auth password encoding differs from 2.0.1 (A00.FR.205 says so) and is not handled; the `BasicAuthenticator` lookup receives the raw password string. Revisit when the whitepaper is added.
 
