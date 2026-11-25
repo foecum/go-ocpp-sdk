@@ -226,7 +226,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Tag `v0.1.0` (ask owner first)
 
 ### Phase 7 — OCPP 1.6 security extension (optional, ask owner)
-- [ ] `v16/security`: SecurityEventNotification, SignCertificate,
+- [x] `v16/security`: SecurityEventNotification, SignCertificate,
       CertificateSigned, InstallCertificate, DeleteCertificate,
       GetInstalledCertificateIds, ExtendedTriggerMessage, GetLog, LogStatusNotification,
       SignedUpdateFirmware, SignedFirmwareStatusNotification
@@ -298,6 +298,8 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Handler wiring for those profiles follows the approved Phase 4 shape: one optional `Config` field per profile (`csms.Config.Firmware`; `chargepoint.Config.Firmware/LocalAuth/Reservation/SmartCharging/RemoteTrigger`), a nil one answers `NotSupported`. Profiles whose messages only flow from the Central System need no CSMS-side handler. Shared test helpers live in `internal/schematest`; profile `Features()` are built with `internal/featureset`.
 - 2026-11-25 — Examples (approved by the owner): plain `ws://` with optional Basic auth, no TLS flags (the README shows the TLS setup). Each example is a thin `main` over `run(ctx, ...)`; `examples/v16/smoke_test.go` builds both and runs them against each other (skipped with `-short`). Every package has tested `Example` functions with `// Output:` checks. The `v0.1.0` tag is made only with the owner's OK, preferably after pushing and seeing CI and Pages succeed.
 - 2026-11-25 — `v0.1.0` tagged locally with the owner's OK (OCPP 1.6J complete). Not pushed: the owner pushes `main` and the tag, after CI and Pages have run.
+- 2026-11-25 — Security extension (approved by the owner): all its types live in `v16/security` (not in the shared `types`); its enumerations are generated from the whitepaper schemas and renamed where they clash with Core ones (`SignedFirmwareStatus`, `ExtendedMessageTrigger`, `SignedUpdateFirmwareStatus`); security event names are untyped string constants with `IsKnownEvent` / `IsCriticalEvent`; wiring is a `Security` field in both `Config`s with `Unimplemented...` handlers (Central System side: security events, SignCertificate, log and firmware status; station side: certificates, GetLog, SignedUpdateFirmware, ExtendedTriggerMessage). `internal/schematest` inlines `$ref` so the draft-06 schemas can be tested.
+- 2026-11-25 — No Claude/AI attribution trailers in commits (owner's request): the local history was rewritten to remove `Co-Authored-By` lines. Commits up to the first push (`1f8f63f`, tag `v0.1.0`) were already on the remote, so publishing the rewrite needs a force push by the owner.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
@@ -307,7 +309,8 @@ List anything not implemented or simplified, with a reason.
 - (none yet)
 - Opt-in retry/queue helper for transaction messages (StartTransaction, StopTransaction, MeterValues) per the 1.6 configuration keys: not implemented; the owner wants it added later (it needs persistence decisions).
 - 1.6 string types: the specification restricts `CiString` and `String` to printable ASCII. Only lengths are enforced (schemas do the same), because real charge points send other characters. Revisit if strictness is wanted.
-- 1.6 security profiles: the OCPP 1.6 security whitepaper is not in `docs/spec/1.6/`, so profiles 1–3 are implemented from OCPP 2.0.1 part 2 §A00. The 1.6 Basic-auth password encoding differs from 2.0.1 (A00.FR.205 says so) and is not handled; the `BasicAuthenticator` lookup receives the raw password string. Revisit when the whitepaper is added.
+- 1.6 security profiles: resolved by the security whitepaper (edition 3, now in `docs/spec/1.6/`). The Basic-auth password is the `AuthorizationKey` (16–20 bytes as 32–40 hex digits, sent as that text), which `ws.BasicAuthenticator` already compares as given; `security.CheckAuthorizationKey` / `GenerateAuthorizationKey` validate and create keys. Still open: the whitepaper tolerates TLS 1.0/1.1 for old stations; `ws` requires TLS 1.2 or newer and does not support them.
+- 1.6 security extension, leniencies: `serialNumber` in `CertificateHashData` is checked for hexadecimal characters only (the whitepaper says no leading zeros; stations that send them are accepted); `GetInstalledCertificateIds.conf` accepts an empty `certificateHashData` list (the spec says 0..*, the schema says at least 1; the spec wins); certificates and CSRs are checked as PEM blocks of the right type but their X.509 contents are not parsed.
 
 ## 10. Documentation site
 

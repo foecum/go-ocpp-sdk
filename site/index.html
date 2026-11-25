@@ -247,7 +247,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is next.</div>
+      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages and the 11 of the security extension, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is next.</div>
     </section>
 
     <section id="install">
@@ -445,6 +445,7 @@ func (handler) Reset(ctx context.Context, req *core.ResetRequest) (*core.ResetCo
         <tr><td>Reservation</td><td>none</td><td><code>Reservation</code>: <code>ReservationHandler</code></td></tr>
         <tr><td>Smart Charging</td><td>none</td><td><code>SmartCharging</code>: <code>SmartChargingHandler</code></td></tr>
         <tr><td>Remote Trigger</td><td>none</td><td><code>RemoteTrigger</code>: <code>RemoteTriggerHandler</code></td></tr>
+        <tr><td>Security extension</td><td><code>Security</code>: <code>SecurityHandler</code> (security events, SignCertificate, log and firmware status)</td><td><code>Security</code>: <code>SecurityHandler</code> (certificates, GetLog, SignedUpdateFirmware, ExtendedTriggerMessage)</td></tr>
       </table></div>
       <div class="tablewrap"><table>
         <tr><th>Situation</th><th>What the peer receives</th></tr>
@@ -519,7 +520,7 @@ level=INFO msg="stop transaction" id=CS001 transaction=1 meterStop=1000 reason=L
 
     <section id="messages">
       <h2>OCPP 1.6 messages</h2>
-      <p><code>v16.NewRegistry()</code> returns an <code>ocppj.Registry</code> with every implemented message, ready for an <code>Endpoint</code>. The messages live in one package per profile (<code>v16/core</code>, <code>firmware</code>, <code>localauth</code>, <code>reservation</code>, <code>smartcharging</code> and <code>remotetrigger</code>); shared types and enumerations live in <code>v16/types</code>.</p>
+      <p><code>v16.NewRegistry()</code> returns an <code>ocppj.Registry</code> with every implemented message, ready for an <code>Endpoint</code>. The messages live in one package per profile (<code>v16/core</code>, <code>firmware</code>, <code>localauth</code>, <code>reservation</code>, <code>smartcharging</code>, <code>remotetrigger</code> and <code>security</code>); shared types and enumerations live in <code>v16/types</code>.</p>
       <h3>Naming</h3>
       <p>Each message is a pair named after the specification: <code>BootNotificationRequest</code> (the <code>.req</code> PDU) and <code>BootNotificationConfirmation</code> (the <code>.conf</code> PDU). In a handler, switch on the request type (<code>*core.BootNotificationRequest</code>) and return the matching confirmation.</p>
       <h3>Building and validating messages</h3>
@@ -583,8 +584,19 @@ fmt.Println(bad.Validate()) // ocpp: invalid field "connectorId": must be at lea
         <tr><td><code>ClearChargingProfile</code></td><td>Smart Charging</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
         <tr><td><code>GetCompositeSchedule</code></td><td>Smart Charging</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
         <tr><td><code>TriggerMessage</code></td><td>Remote Trigger</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>CertificateSigned</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>DeleteCertificate</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>ExtendedTriggerMessage</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>GetInstalledCertificateIds</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>GetLog</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>InstallCertificate</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>LogStatusNotification</code></td><td>Security extension</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>SecurityEventNotification</code></td><td>Security extension</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>SignCertificate</code></td><td>Security extension</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>SignedFirmwareStatusNotification</code></td><td>Security extension</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>SignedUpdateFirmware</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
       </table></div>
-      <p>All 28 messages of OCPP 1.6 (JSON) are supported. Planned, in later phases: the 1.6 security extension, then OCPP 2.0.1.</p>
+      <p>All 28 messages of OCPP 1.6 (JSON) and the 11 messages of its security extension are supported. Planned: OCPP 2.0.1.</p>
     </section>
 
     <section id="transport">
@@ -722,7 +734,7 @@ func main() {
         <li>Profile 3 requires the certificate's subject CN to equal the identity. Set <code>ClientCertOptions.Organization</code> to also require the operator name in the subject O, or <code>Identity</code> to use your own rule.</li>
         <li>TLS 1.2 is the minimum, and only the AES-GCM suites the specification lists (plus the equivalent ECDHE-RSA ones) are enabled. The CSMS certificate is verified through its subjectAltName, as Go requires.</li>
       </ul>
-      <div class="note warn"><strong>OCPP 1.6 note</strong>The 1.6 security whitepaper is not part of this repository's specs yet, so the profiles follow OCPP 2.0.1. The 1.6 Basic-auth password encoding differs from 2.0.1 and is not handled.</div>
+      <div class="note"><strong>OCPP 1.6 password format</strong>For OCPP 1.6 the Basic-auth password is the <code>AuthorizationKey</code>: 16 to 20 random bytes written as 32 to 40 hexadecimal digits, sent as that text. <code>ws.BasicAuthenticator</code> compares it as it is. <code>security.GenerateAuthorizationKey()</code> makes a suitable key and <code>security.CheckAuthorizationKey</code> validates one. TLS 1.0 and 1.1, which the whitepaper tolerates for old stations, are not supported: connections need TLS 1.2 or newer.</div>
     </section>
 
     <section id="frames">
@@ -870,7 +882,8 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>4</td><td>High-level <code>chargepoint/v16</code> and <code>csms/v16</code></td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>5</td><td>Remaining 1.6 profiles: firmware, local auth list, reservation, smart charging, remote trigger</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>6</td><td>Examples, docs, v0.1.0</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>7–8</td><td>1.6 security extension, OCPP 2.0.1</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>7</td><td>OCPP 1.6 security extension</td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>8</td><td>OCPP 2.0.1</td><td><span class="badge b-next">Next</span></td></tr>
         <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
       </table></div>
       <h3>Supported messages</h3>

@@ -6,8 +6,9 @@ A Go SDK for [OCPP](https://openchargealliance.org/protocols/open-charge-point-p
 (Open Charge Point Protocol), the protocol between EV charging stations and their
 central management system.
 
-**Status: pre-1.0.** OCPP 1.6J is complete: all 28 messages, both roles, WebSocket
-transport with security profiles 1 to 3. The API may still change before 1.0.
+**Status: pre-1.0.** OCPP 1.6J is complete: all 28 messages and the 11 of the
+security extension, both roles, WebSocket transport with security profiles 1 to 3.
+The API may still change before 1.0.
 OCPP 2.0.1 is next; see the [roadmap](AGENTS.md#7-roadmap).
 
 - Both roles: charging station (`chargepoint`) and Central System / CSMS (`csms`).
@@ -140,13 +141,13 @@ if cp, ok := srv.ChargePoint("CS001"); ok {
 
 Each OCPP profile has its own handler, set in the matching `Config` field
 (`Core`, `Firmware`, `LocalAuth`, `Reservation`, `SmartCharging`,
-`RemoteTrigger`). A profile with no handler, or a method you left to the embedded
+`RemoteTrigger`, `Security`). A profile with no handler, or a method you left to the embedded
 `Unimplemented...Handler`, is answered with `NotSupported`; an action the SDK
 does not know is answered with `NotImplemented`.
 
 ## Supported messages
 
-All 28 messages of OCPP 1.6 (JSON):
+All 28 messages of OCPP 1.6 (JSON), and the 11 messages of its security extension:
 
 | Profile | Messages |
 |---|---|
@@ -156,10 +157,11 @@ All 28 messages of OCPP 1.6 (JSON):
 | Reservation | ReserveNow, CancelReservation |
 | Smart Charging | SetChargingProfile, ClearChargingProfile, GetCompositeSchedule |
 | Remote Trigger | TriggerMessage |
+| Security extension | CertificateSigned, DeleteCertificate, ExtendedTriggerMessage, GetInstalledCertificateIds, GetLog, InstallCertificate, LogStatusNotification, SecurityEventNotification, SignCertificate, SignedFirmwareStatusNotification, SignedUpdateFirmware |
 
 Message types are in `v16/core`, `v16/firmware`, `v16/localauth`,
-`v16/reservation`, `v16/smartcharging` and `v16/remotetrigger`; shared types and
-enumerations are in `v16/types`. Each message is a `...Request` and a
+`v16/reservation`, `v16/smartcharging`, `v16/remotetrigger` and `v16/security`;
+shared types and enumerations are in `v16/types`. Each message is a `...Request` and a
 `...Confirmation` type named after the specification.
 
 ## Security profiles
@@ -196,9 +198,14 @@ cp, _ := chargepoint.New(chargepoint.Config{
 })
 ```
 
-The OCPP 1.6 security whitepaper is not part of this repository's specifications,
-so the profiles follow OCPP 2.0.1 part 2. The 1.6 Basic-auth password encoding
-differs from 2.0.1 and is not handled.
+For OCPP 1.6 the Basic-auth password is the `AuthorizationKey`: 16 to 20 random
+bytes written as 32 to 40 hexadecimal digits, sent as that text. `ws.BasicAuthenticator`
+compares it as it is; `security.GenerateAuthorizationKey()` makes a suitable key and
+`security.CheckAuthorizationKey` validates one. The certificate messages (`SignCertificate`,
+`CertificateSigned`, `InstallCertificate` and so on) are in `v16/security`.
+
+TLS 1.0 and 1.1, which the whitepaper tolerates for old stations that cannot do
+TLS 1.2, are not supported: connections need TLS 1.2 or newer.
 
 ## Logging
 
