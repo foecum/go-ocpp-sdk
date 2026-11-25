@@ -129,7 +129,7 @@ func TestSendAndCallResultErrorAreUnknownBefore21(t *testing.T) {
 			if !errors.As(err, &pe) {
 				t.Fatalf("%s %s: %v", v, frame, err)
 			}
-			if wantReply := v != ocpp.V16; pe.ShouldReply() != wantReply {
+			if wantReply := v == ocpp.V201; pe.ShouldReply() != wantReply {
 				t.Errorf("%s %s: reply=%v", v, frame, pe.ShouldReply())
 			}
 		}

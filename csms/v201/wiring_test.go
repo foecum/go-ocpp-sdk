@@ -22,7 +22,7 @@ func allFeatures(t *testing.T) []ocpp.Feature {
 }
 
 func handledByCSMS(action string) bool {
-	d := gen.Directions[action]
+	d := gen.V201.Directions[action]
 	return d == gen.FromStation || d == gen.Both
 }
 
@@ -74,14 +74,14 @@ func TestDispatchAnswersNotSupportedWithoutAnImplementation(t *testing.T) {
 func TestHandlerInterfacesMatchTheDirections(t *testing.T) {
 	cfg := reflect.TypeOf(Config{})
 	seen := map[string]bool{}
-	for _, b := range gen.Blocks {
+	for _, b := range gen.V201.Blocks {
 		var want []string
 		for _, m := range b.Messages {
 			if handledByCSMS(m) {
 				want = append(want, m)
 			}
 		}
-		field, ok := cfg.FieldByName(gen.HandlerNames[b.Pkg])
+		field, ok := cfg.FieldByName(gen.V201.HandlerNames[b.Pkg])
 		if len(want) == 0 {
 			if ok {
 				t.Errorf("block %s has no messages for the CSMS to handle but Config has a field for it", b.Pkg)
@@ -148,7 +148,7 @@ func TestEveryCallMethodReachesTheEndpoint(t *testing.T) {
 	called := 0
 	cpv := reflect.ValueOf(cp)
 	for _, f := range allFeatures(t) {
-		if handledByCSMS(f.Action()) && gen.Directions[f.Action()] != gen.Both {
+		if handledByCSMS(f.Action()) && gen.V201.Directions[f.Action()] != gen.Both {
 			continue
 		}
 		m := cpv.MethodByName(f.Action())

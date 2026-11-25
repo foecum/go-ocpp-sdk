@@ -58,6 +58,12 @@ func Call[Resp any](ctx context.Context, s *Session, req ocpp.Request) (*Resp, e
 	return rpc.Call[Resp](ctx, s.ep, req)
 }
 
+// Send sends msg to the charge point as an unconfirmed (SEND) message, which
+// OCPP 2.1 has.
+func Send(ctx context.Context, s *Session, msg ocpp.Request) error {
+	return rpc.Send(ctx, s.ep, msg)
+}
+
 // Config configures a Server. H is the public handle type of a connected charge
 // point (for example csms.ChargePoint).
 type Config[H any] struct {
@@ -69,6 +75,9 @@ type Config[H any] struct {
 	NewHandle func(s *Session) *H
 	// Dispatch answers an incoming call.
 	Dispatch func(ctx context.Context, h *H, req ocpp.Request) (ocpp.Response, error)
+	// DispatchSend handles an incoming unconfirmed (SEND) message, which OCPP 2.1
+	// has. Optional: without it such messages are dropped.
+	DispatchSend func(ctx context.Context, h *H, msg ocpp.Request) error
 	// OnConnect and OnDisconnect are optional hooks.
 	OnConnect    func(h *H)
 	OnDisconnect func(h *H, err error)
@@ -124,7 +133,7 @@ func New[H any](cfg Config[H]) (*Server[H], error) {
 func (s *Server[H]) onConnect(c *ws.Conn) {
 	session := &Session{conn: c}
 	handle := s.cfg.NewHandle(session)
-	ep, err := newEndpoint(ocppj.Config{
+	cfg := ocppj.Config{
 		Registry: s.cfg.Registry,
 		Send:     c.Write,
 		Timeout:  s.cfg.CallTimeout,
@@ -132,7 +141,13 @@ func (s *Server[H]) onConnect(c *ws.Conn) {
 		Handler: func(ctx context.Context, req ocpp.Request) (ocpp.Response, error) {
 			return s.cfg.Dispatch(ctx, handle, req)
 		},
-	})
+	}
+	if s.cfg.DispatchSend != nil {
+		cfg.SendHandler = func(ctx context.Context, msg ocpp.Request) error {
+			return s.cfg.DispatchSend(ctx, handle, msg)
+		}
+	}
+	ep, err := newEndpoint(cfg)
 	if err != nil { // cannot happen: Registry and Send are set
 		s.log.Error("cannot create endpoint", "charge_point", c.ID(), "err", err)
 		_ = c.Close()

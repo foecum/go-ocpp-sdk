@@ -4,7 +4,8 @@ package featureset
 
 import ocpp "github.com/foecum/go-ocpp-sdk"
 
-// Pair is a request and its confirmation.
+// Pair is a request and its confirmation. Resp is nil for an unconfirmed
+// (SEND) message.
 type Pair struct {
 	Req  ocpp.Request
 	Resp ocpp.Response
@@ -16,7 +17,13 @@ type Pair struct {
 func Build(pairs ...Pair) []ocpp.Feature {
 	features := make([]ocpp.Feature, 0, len(pairs))
 	for _, p := range pairs {
-		f, err := ocpp.NewFeature(p.Req, p.Resp)
+		var f ocpp.Feature
+		var err error
+		if p.Resp == nil {
+			f, err = ocpp.NewSendFeature(p.Req)
+		} else {
+			f, err = ocpp.NewFeature(p.Req, p.Resp)
+		}
 		if err != nil {
 			panic("featureset: " + err.Error())
 		}

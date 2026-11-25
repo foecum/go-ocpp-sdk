@@ -1,10 +1,12 @@
 package featureset_test
 
 import (
+	ocpp "github.com/foecum/go-ocpp-sdk"
 	"testing"
 
 	"github.com/foecum/go-ocpp-sdk/internal/featureset"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
+	"github.com/foecum/go-ocpp-sdk/v21/diagnostics"
 )
 
 func TestBuild(t *testing.T) {
@@ -27,4 +29,11 @@ func TestBuildPanicsOnMismatchedPair(t *testing.T) {
 		}
 	}()
 	featureset.Build(featureset.Pair{Req: core.HeartbeatRequest{}, Resp: core.ResetConfirmation{}})
+}
+
+func TestBuildOneWayPair(t *testing.T) {
+	fs := featureset.Build(featureset.Pair{Req: diagnostics.NotifyPeriodicEventStream{}})
+	if len(fs) != 1 || fs[0].Action() != "NotifyPeriodicEventStream" || !ocpp.IsOneWay(fs[0]) {
+		t.Errorf("%v", fs)
+	}
 }

@@ -12,16 +12,19 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the generated files")
 
-const (
-	schemaDir = "../../docs/spec/2.0.1/schemas"
-	repoRoot  = "../.."
-)
+const repoRoot = "../.."
 
-// TestGeneratedCodeIsUpToDate checks that the committed v201 sources are exactly
-// what the generator produces from the schemas. Run it with -update to rewrite
-// them after changing the generator or the schemas.
+// TestGeneratedCodeIsUpToDate checks that the committed v201 and v21 sources are
+// exactly what the generator produces from the schemas. Run it with -update to
+// rewrite them after changing the generator or the schemas.
 func TestGeneratedCodeIsUpToDate(t *testing.T) {
-	files, err := Generate(schemaDir)
+	for _, p := range []Profile{V201, V21} {
+		t.Run(p.Dir, func(t *testing.T) { checkUpToDate(t, p) })
+	}
+}
+
+func checkUpToDate(t *testing.T, p Profile) {
+	files, err := Generate(p, filepath.Join(repoRoot, p.SchemaRel))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,11 +46,11 @@ func TestGeneratedCodeIsUpToDate(t *testing.T) {
 		}
 		have, err := os.ReadFile(dst)
 		if err != nil {
-			t.Errorf("%s is missing; run: go test ./internal/gen201 -run TestGeneratedCodeIsUpToDate -update", p)
+			t.Errorf("%s is missing; run: go test ./internal/gen -run TestGeneratedCodeIsUpToDate -update", p)
 			continue
 		}
 		if !bytes.Equal(have, files[p]) {
-			t.Errorf("%s is out of date; run: go test ./internal/gen201 -run TestGeneratedCodeIsUpToDate -update", p)
+			t.Errorf("%s is out of date; run: go test ./internal/gen -run TestGeneratedCodeIsUpToDate -update", p)
 		}
 	}
 }
@@ -74,16 +77,23 @@ func pair(name, definitions, props, required string) map[string]string {
 
 var oneBlock = []Block{{Pkg: "demo", Letter: "X", Title: "Demo", Messages: []string{"Demo"}}}
 
+// testProfile is the 2.0.1 profile with the given blocks.
+func testProfile(blocks []Block) Profile {
+	p := V201
+	p.Blocks = blocks
+	return p
+}
+
 func mustFail(t *testing.T, files map[string]string, blocks []Block, want string) {
 	t.Helper()
-	_, err := generate(writeSchemas(t, files), blocks)
+	_, err := generate(testProfile(blocks), writeSchemas(t, files))
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("want an error containing %q, got %v", want, err)
 	}
 }
 
 func TestGenerateRejectsBadInput(t *testing.T) {
-	if _, err := Generate(filepath.Join(t.TempDir(), "missing")); err == nil {
+	if _, err := Generate(V201, filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Error("a missing directory must fail")
 	}
 	mustFail(t, map[string]string{"DemoRequest.json": `{not json`}, oneBlock, "DemoRequest.json")
@@ -123,7 +133,7 @@ func TestGenerateRejectsUnsupportedSchemas(t *testing.T) {
 		"bad property name":         pair("Demo", ``, `"1x":{"type":"string"}`, ``),
 	}
 	for name, files := range tests {
-		if _, err := generate(writeSchemas(t, files), oneBlock); err == nil {
+		if _, err := generate(testProfile(oneBlock), writeSchemas(t, files)); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
 	}
@@ -167,7 +177,7 @@ func TestGenerateCoversEveryConstruct(t *testing.T) {
 		`"evseId":{"type":"integer"}`
 	files := pair("Demo", defs, props, `"mode","modes","inner","name","when","count","ratio","flag","anything","ids","action","free2","free3","flagToo","evseId"`)
 	files["DemoResponse.json"] = `{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}`
-	out, err := generate(writeSchemas(t, files), oneBlock)
+	out, err := generate(testProfile(oneBlock), writeSchemas(t, files))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,19 +266,30 @@ func TestCommentFormatting(t *testing.T) {
 }
 
 func TestDirectionsCoverEveryMessage(t *testing.T) {
-	total, fromStation, fromCSMS := 0, 0, 0
-	for _, b := range Blocks {
-		for _, m := range b.Messages {
-			total++
-			switch Directions[m] {
-			case FromStation:
-				fromStation++
-			case FromCSMS:
-				fromCSMS++
+	for _, tc := range []struct {
+		p                                 Profile
+		total, fromStation, fromCSMS, one int
+	}{
+		{V201, 64, 24, 39, 0},
+		{V21, 91, 36, 54, 1},
+	} {
+		total, fromStation, fromCSMS, one := 0, 0, 0, 0
+		for _, b := range tc.p.Blocks {
+			for _, m := range b.Messages {
+				total++
+				switch tc.p.Directions[m] {
+				case FromStation:
+					fromStation++
+				case FromCSMS:
+					fromCSMS++
+				}
+				if tc.p.OneWay[m] {
+					one++
+				}
 			}
 		}
-	}
-	if total != 64 || fromStation != 24 || fromCSMS != 39 || Directions["DataTransfer"] != Both {
-		t.Errorf("total=%d fromStation=%d fromCSMS=%d", total, fromStation, fromCSMS)
+		if total != tc.total || fromStation != tc.fromStation || fromCSMS != tc.fromCSMS || one != tc.one || tc.p.Directions["DataTransfer"] != Both {
+			t.Errorf("%s: total=%d fromStation=%d fromCSMS=%d oneWay=%d", tc.p.Name, total, fromStation, fromCSMS, one)
+		}
 	}
 }

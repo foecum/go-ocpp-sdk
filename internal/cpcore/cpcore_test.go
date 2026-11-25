@@ -15,6 +15,9 @@ import (
 	"github.com/foecum/go-ocpp-sdk/ocppj"
 	"github.com/foecum/go-ocpp-sdk/v16"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
+	"github.com/foecum/go-ocpp-sdk/v21"
+	"github.com/foecum/go-ocpp-sdk/v21/diagnostics"
+	"github.com/foecum/go-ocpp-sdk/v21/types"
 	"github.com/foecum/go-ocpp-sdk/ws"
 )
 
@@ -175,5 +178,73 @@ func TestConnectionIsDroppedIfItsEndpointCannotBeBuilt(t *testing.T) {
 	}
 	if s.Connected() {
 		t.Error("a connection without an endpoint must not count as connected")
+	}
+}
+
+func TestSendWhileDisconnected(t *testing.T) {
+	s, err := New(testConfig(t, "ws://localhost:1/ocpp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := diagnostics.NotifyPeriodicEventStream{ID: 1, Basetime: ocpp.Now(), Data: []types.StreamDataElement{{V: "1"}}}
+	if err := Send(context.Background(), s, msg); !errors.Is(err, ocpp.ErrNotConnected) {
+		t.Errorf("got %v", err)
+	}
+}
+
+// An OCPP 2.1 station sends unconfirmed messages and receives them through DispatchSend.
+func TestUnconfirmedMessages(t *testing.T) {
+	conns := make(chan *websocket.Conn, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"ocpp2.1"}})
+		if err != nil {
+			return
+		}
+		conns <- c
+		<-r.Context().Done()
+	}))
+	defer ts.Close()
+
+	reg, err := v21.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan ocpp.Request, 1)
+	s, err := New(Config{
+		Version: ocpp.V21, Registry: reg, URL: "ws" + strings.TrimPrefix(ts.URL, "http") + "/ocpp", ID: "CS1", Reconnect: fastBackoff(),
+		Dispatch:     func(context.Context, ocpp.Request) (ocpp.Response, error) { return nil, errors.New("unused") },
+		DispatchSend: func(_ context.Context, m ocpp.Request) error { got <- m; return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = s.Run(context.Background()) }()
+	defer s.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.WaitConnected(ctx); err != nil {
+		t.Fatal(err)
+	}
+	srv := <-conns
+
+	msg := diagnostics.NotifyPeriodicEventStream{ID: 4, Basetime: ocpp.Now(), Data: []types.StreamDataElement{{V: "1"}}}
+	if err := Send(ctx, s, msg); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err := srv.Read(ctx)
+	if err != nil || !strings.HasPrefix(string(data), `[6,"`) || !strings.Contains(string(data), `"NotifyPeriodicEventStream"`) {
+		t.Fatalf("frame %s %v", data, err)
+	}
+	// The other side's SEND reaches DispatchSend.
+	if err := srv.Write(ctx, websocket.MessageText, []byte(`[6,"x1","NotifyPeriodicEventStream",{"id":9,"pending":0,"basetime":"2026-01-01T00:00:00Z","data":[{"t":0,"v":"1"}]}]`)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case m := <-got:
+		if m.(*diagnostics.NotifyPeriodicEventStream).ID != 9 {
+			t.Errorf("%+v", m)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("DispatchSend not called")
 	}
 }

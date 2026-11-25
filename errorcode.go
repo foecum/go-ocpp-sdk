@@ -33,7 +33,8 @@ const (
 	TypeConstraintViolation ErrorCode = "TypeConstraintViolation"
 	// GenericError is any other error not covered by a more specific code.
 	GenericError ErrorCode = "GenericError"
-	// MessageTypeNotSupported means the message type number is not supported (2.0.1 and 2.1).
+	// MessageTypeNotSupported means the message type number is not supported (2.0.1;
+	// deprecated in 2.1, where such a message is silently ignored, but still accepted).
 	MessageTypeNotSupported ErrorCode = "MessageTypeNotSupported"
 	// RpcFrameworkError means the content is not a valid RPC request, for
 	// example the message ID could not be read (2.0.1 and 2.1).

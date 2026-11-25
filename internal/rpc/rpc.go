@@ -30,6 +30,30 @@ func Call[Resp any](ctx context.Context, ep *ocppj.Endpoint, req ocpp.Request) (
 	return out, nil
 }
 
+// Send sends msg on ep as an unconfirmed (SEND) message. An error from a
+// connection that closed matches ocpp.ErrNotConnected.
+func Send(ctx context.Context, ep *ocppj.Endpoint, msg ocpp.Request) error {
+	if err := ep.Send(ctx, msg); err != nil {
+		if errors.Is(err, ocpp.ErrClosed) {
+			return fmt.Errorf("%w: connection closed", ocpp.ErrNotConnected)
+		}
+		return err
+	}
+	return nil
+}
+
+// SafeSend runs fn, the handler of an unconfirmed message, and turns a panic
+// into an error that is logged by the endpoint.
+func SafeSend(log *slog.Logger, action string, fn func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("handler panicked", "action", action, "panic", fmt.Sprint(r))
+			err = errors.New("handler panicked")
+		}
+	}()
+	return fn()
+}
+
 // Return converts a handler's typed result to the interface the endpoint
 // expects. A nil confirmation with a nil error is reported as an error rather
 // than becoming a non-nil interface holding a nil pointer.

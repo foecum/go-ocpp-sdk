@@ -259,7 +259,7 @@ func codeOnly(src string) string {
 	return sb.String()
 }
 
-func imports(body string, extra ...string) string {
+func (g *gen) imports(body string, extra ...string) string {
 	src := codeOnly(body)
 	var list []string
 	if strings.Contains(src, "json.RawMessage") {
@@ -273,7 +273,7 @@ func imports(body string, extra ...string) string {
 		list = append(list, `"github.com/foecum/go-ocpp-sdk/internal/check"`)
 	}
 	if strings.Contains(src, "types.") {
-		list = append(list, `"github.com/foecum/go-ocpp-sdk/v201/types"`)
+		list = append(list, `"github.com/foecum/go-ocpp-sdk/`+g.p.Dir+`/types"`)
 	}
 	if len(list) == 0 {
 		return ""
@@ -298,25 +298,25 @@ func (g *gen) emitTypes() error {
 			if err != nil {
 				return err
 			}
-			structs.WriteString(comment("", goName, n.Description, goName+" is the "+def+" structure of OCPP 2.0.1."))
+			structs.WriteString(comment("", goName, n.Description, goName+" is the "+def+" structure of OCPP "+g.p.Name+"."))
 			structs.WriteString("type " + goName + " struct " + body)
 		default:
 			return fmt.Errorf("definition %s: %w: type %q", def, errUnsupported, n.Type)
 		}
 	}
 	for file, body := range map[string]string{"enums.go": enums.String(), "structs.go": structs.String()} {
-		src := header + "package types\n\n" + imports(body) + body
+		src := g.header() + "package types\n\n" + g.imports(body) + body
 		out, err := render(src)
 		if err != nil {
 			return err
 		}
-		g.files["v201/types/"+file] = out
+		g.files[g.p.Dir+"/types/"+file] = out
 	}
 	return nil
 }
 
 func (g *gen) enumSource(sb *strings.Builder, def, goName string, n *node) error {
-	sb.WriteString(comment("", goName, n.Description, goName+" is the "+def+" enumeration of OCPP 2.0.1."))
+	sb.WriteString(comment("", goName, n.Description, goName+" is the "+def+" enumeration of OCPP "+g.p.Name+"."))
 	fmt.Fprintf(sb, "type %s string\n\nconst (\n", goName)
 	seen := map[string]string{}
 	var names []string
@@ -354,26 +354,30 @@ func (g *gen) emitBlocks() error {
 			if err != nil {
 				return err
 			}
-			g.files["v201/"+b.Pkg+"/"+snake(m)+".go"] = out
-			pairs = append(pairs, fmt.Sprintf("\t\tfeatureset.Pair{Req: %sRequest{}, Resp: %sResponse{}},\n", m, m))
+			g.files[g.p.Dir+"/"+b.Pkg+"/"+snake(m)+".go"] = out
+			if msg.OneWay {
+				pairs = append(pairs, fmt.Sprintf("\t\tfeatureset.Pair{Req: %s{}},\n", m))
+			} else {
+				pairs = append(pairs, fmt.Sprintf("\t\tfeatureset.Pair{Req: %sRequest{}, Resp: %sResponse{}},\n", m, m))
+			}
 		}
-		feat := header + "package " + b.Pkg + "\n\nimport (\n\tocpp \"github.com/foecum/go-ocpp-sdk\"\n\t\"github.com/foecum/go-ocpp-sdk/internal/featureset\"\n)\n\n" +
+		feat := g.header() + "package " + b.Pkg + "\n\nimport (\n\tocpp \"github.com/foecum/go-ocpp-sdk\"\n\t\"github.com/foecum/go-ocpp-sdk/internal/featureset\"\n)\n\n" +
 			"// Features returns the feature of every message of this block, ready to register in an\n// ocppj.Registry.\nfunc Features() []ocpp.Feature {\n\treturn featureset.Build(\n" + strings.Join(pairs, "") + "\t)\n}\n"
 		out, err := render(feat)
 		if err != nil {
 			return err
 		}
-		g.files["v201/"+b.Pkg+"/features.go"] = out
-		out, err = render(header + blockDoc(b))
+		g.files[g.p.Dir+"/"+b.Pkg+"/features.go"] = out
+		out, err = render(g.header() + g.blockDoc(b))
 		if err != nil {
 			return err
 		}
-		g.files["v201/"+b.Pkg+"/doc.go"] = out
-		out, err = render(blockTest(b))
+		g.files[g.p.Dir+"/"+b.Pkg+"/doc.go"] = out
+		out, err = render(g.blockTest(b))
 		if err != nil {
 			return err
 		}
-		g.files["v201/"+b.Pkg+"/schema_test.go"] = out
+		g.files[g.p.Dir+"/"+b.Pkg+"/schema_test.go"] = out
 	}
 	if err := g.emitRoot(); err != nil {
 		return err
@@ -392,19 +396,19 @@ func (g *gen) emitBlocks() error {
 }
 
 // blockTest renders the test that checks a block's messages against the schemas.
-func blockTest(b Block) string {
+func (g *gen) blockTest(b Block) string {
 	var actions []string
 	for _, m := range b.Messages {
 		actions = append(actions, fmt.Sprintf("%q", m))
 	}
-	return header + fmt.Sprintf(`package %[1]s_test
+	return g.header() + fmt.Sprintf(`package %[1]s_test
 
 import (
 	"testing"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
 	"github.com/foecum/go-ocpp-sdk/internal/schematest"
-	"github.com/foecum/go-ocpp-sdk/v201/%[1]s"
+	"github.com/foecum/go-ocpp-sdk/%[4]s/%[1]s"
 )
 
 // TestAgainstOfficialSchemas round-trips sample payloads derived from the
@@ -412,77 +416,92 @@ import (
 // schemas reject.
 func TestAgainstOfficialSchemas(t *testing.T) {
 	features := %[1]s.Features()
-	schematest.RunGenerated(t, "../../docs/spec/2.0.1/schemas", schematest.NewRegistryFor(t, ocpp.V201, features),
+	schematest.RunGenerated(t, "../../%[5]s", schematest.NewRegistryFor(t, %[6]s, features),
 		[]string{%[2]s})
 	schematest.CheckActionsSuffix(t, features, "Response")
 	if len(features) != %[3]d {
 		t.Errorf("%%d features, want %[3]d", len(features))
 	}
 }
-`, b.Pkg, strings.Join(actions, ", "), len(b.Messages))
+`, b.Pkg, strings.Join(actions, ", "), len(b.Messages), g.p.Dir, g.p.SchemaRel, g.p.Const)
 }
 
-func blockDoc(b Block) string {
+func (g *gen) blockDoc(b Block) string {
 	var sb strings.Builder
 	var lines []string
 	for _, m := range b.Messages {
-		dir := map[Direction]string{FromStation: "sent by the Charging Station", FromCSMS: "sent by the CSMS", Both: "sent by either side"}[Directions[m]]
+		dir := map[Direction]string{FromStation: "sent by the Charging Station", FromCSMS: "sent by the CSMS", Both: "sent by either side"}[g.p.Directions[m]]
+		if g.messages[m] != nil && g.messages[m].OneWay {
+			dir += ", unconfirmed"
+		}
 		lines = append(lines, "//   - "+m+" ("+dir+")")
 	}
-	fmt.Fprintf(&sb, "// Package %s implements the OCPP 2.0.1 functional block %s, %s.\n//\n// Messages:\n//\n%s\n//\n", b.Pkg, b.Letter, b.Title, strings.Join(lines, "\n"))
-	sb.WriteString("// Each message is a Request and a Response type named after the specification. They\n// have Validate methods that check required fields, lengths, ranges, array sizes and\n// enumeration values, and Features registers them in an ocppj.Registry. Shared types are\n// in package v201/types.\n")
+	fmt.Fprintf(&sb, "// Package %s implements the OCPP %s functional block %s, %s.\n//\n// Messages:\n//\n%s\n//\n", b.Pkg, g.p.Name, b.Letter, b.Title, strings.Join(lines, "\n"))
+	sb.WriteString("// Each message is a Request and a Response type named after the specification. They\n// have Validate methods that check required fields, lengths, ranges, array sizes and\n// enumeration values, and Features registers them in an ocppj.Registry. Shared types are\n// in package " + g.p.Dir + "/types.\n")
+	if g.hasOneWay(b) {
+		sb.WriteString("//\n// An unconfirmed message has no Response: it is sent as an OCPP-J SEND frame and the\n// receiver never answers it. Its type carries the message's name, without a Request suffix.\n")
+	}
 	fmt.Fprintf(&sb, "package %s\n", b.Pkg)
 	return sb.String()
 }
 
 func (g *gen) messageSource(b Block, m *message) (string, error) {
-	sender := map[Direction]string{FromStation: "the Charging Station", FromCSMS: "the CSMS", Both: "either side"}[Directions[m.Name]]
+	sender := map[Direction]string{FromStation: "the Charging Station", FromCSMS: "the CSMS", Both: "either side"}[g.p.Directions[m.Name]]
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "// %sAction is the action name of the %s message.\nconst %sAction = %q\n\n", m.Name, m.Name, m.Name, m.Name)
-	for _, kind := range []struct {
+	kinds := []struct {
 		suffix string
 		n      *node
 		who    string
 	}{
 		{"Request", m.Request, "sent by " + sender},
 		{"Response", m.Response, "the answer to it"},
-	} {
+	}
+	if m.OneWay {
+		kinds = kinds[:1]
+		kinds[0].suffix, kinds[0].who = "", "sent by "+sender+" as an unconfirmed SEND message, which is never answered"
+	}
+	for _, kind := range kinds {
 		name := m.Name + kind.suffix
 		def := name
 		body, err := g.structBody(def, name, kind.n, "types.")
 		if err != nil {
 			return "", err
 		}
-		doc := fmt.Sprintf("%s is the %s of the %s message (OCPP 2.0.1 block %s, %s), %s.",
-			name, strings.ToLower(kind.suffix), m.Name, b.Letter, b.Title, kind.who)
+		noun := strings.ToLower(kind.suffix)
+		if m.OneWay {
+			noun = "payload"
+		}
+		doc := fmt.Sprintf("%s is the %s of the %s message (OCPP %s block %s, %s), %s.",
+			name, noun, m.Name, g.p.Name, b.Letter, b.Title, kind.who)
 		sb.WriteString(wrap("// ", doc))
 		fmt.Fprintf(&sb, "type %s struct %s", name, body)
 		fmt.Fprintf(&sb, "// Action returns the action name of the message.\nfunc (%s) Action() string { return %sAction }\n\n", name, m.Name)
 	}
 	body := sb.String()
-	return header + "package " + b.Pkg + "\n\n" + imports(body) + body, nil
+	return g.header() + "package " + b.Pkg + "\n\n" + g.imports(body) + body, nil
 }
 
-// emitRoot renders package v201 (the registry of every message) and the test of
+// emitRoot renders the version package (the registry of every message) and the test of
 // package types, which can only exercise the shared types through the messages.
 func (g *gen) emitRoot() error {
 	var imports, calls, actions []string
 	for _, b := range g.blocks {
-		imports = append(imports, fmt.Sprintf("\t\"github.com/foecum/go-ocpp-sdk/v201/%s\"", b.Pkg))
+		imports = append(imports, fmt.Sprintf("\t\"github.com/foecum/go-ocpp-sdk/%s/%s\"", g.p.Dir, b.Pkg))
 		calls = append(calls, fmt.Sprintf("\t\t%s.Features(),", b.Pkg))
 		for _, m := range b.Messages {
 			actions = append(actions, fmt.Sprintf("%q", m))
 		}
 	}
 	sort.Strings(actions)
-	root := header + `// Package v201 is the entry point for OCPP 2.0.1 (JSON). Its NewRegistry returns an
-// ocppj.Registry with every OCPP 2.0.1 message registered, ready to hand to an
+	root := g.header() + `// Package ` + g.p.Dir + ` is the entry point for OCPP ` + g.p.Name + ` (JSON). Its NewRegistry returns an
+// ocppj.Registry with every OCPP ` + g.p.Name + ` message registered, ready to hand to an
 // ocppj.Endpoint.
 //
 // The messages live in one package per functional block of the specification
 // (security, provisioning, authorization and so on); the types they share live in
 // package types.
-package v201
+package ` + g.p.Dir + `
 
 import (
 	"fmt"
@@ -492,7 +511,7 @@ import (
 ` + strings.Join(imports, "\n") + `
 )
 
-// Features returns the features of every OCPP 2.0.1 message.
+// Features returns the features of every OCPP ` + g.p.Name + ` message.
 func Features() []ocpp.Feature {
 	var all []ocpp.Feature
 	for _, block := range [][]ocpp.Feature{
@@ -503,14 +522,14 @@ func Features() []ocpp.Feature {
 	return all
 }
 
-// NewRegistry returns a registry for ocpp.V201 containing every message.
+// NewRegistry returns a registry for ` + g.p.Const + ` containing every message.
 func NewRegistry() (*ocppj.Registry, error) { return registryOf(Features()) }
 
 func registryOf(features []ocpp.Feature) (*ocppj.Registry, error) {
-	reg := ocppj.NewRegistry(ocpp.V201)
+	reg := ocppj.NewRegistry(` + g.p.Const + `)
 	for _, f := range features {
 		if err := reg.Register(f); err != nil {
-			return nil, fmt.Errorf("v201: %w", err)
+			return nil, fmt.Errorf("` + g.p.Dir + `: %w", err)
 		}
 	}
 	return reg, nil
@@ -520,31 +539,41 @@ func registryOf(features []ocpp.Feature) (*ocppj.Registry, error) {
 	if err != nil {
 		return err
 	}
-	g.files["v201/v201.go"] = out
-	typesTest := header + `package types_test
+	g.files[g.p.Dir+"/"+g.p.Dir+".go"] = out
+	typesTest := g.header() + `package types_test
 
 import (
 	"testing"
 
 	"github.com/foecum/go-ocpp-sdk/internal/schematest"
-	"github.com/foecum/go-ocpp-sdk/v201"
+	"github.com/foecum/go-ocpp-sdk/` + g.p.Dir + `"
 )
 
 // TestSharedTypesAgainstOfficialSchemas runs every message through the schema
 // tests. The shared types are exercised by all of them, which is the only way
 // to reach every generated structure and enumeration.
 func TestSharedTypesAgainstOfficialSchemas(t *testing.T) {
-	reg, err := v201.NewRegistry()
+	reg, err := ` + g.p.Dir + `.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	schematest.RunGenerated(t, "../../docs/spec/2.0.1/schemas", reg, []string{` + strings.Join(actions, ", ") + `})
+	schematest.RunGenerated(t, "../../` + g.p.SchemaRel + `", reg, []string{` + strings.Join(actions, ", ") + `})
 }
 `
 	out, err = render(typesTest)
 	if err != nil {
 		return err
 	}
-	g.files["v201/types/schema_test.go"] = out
+	g.files[g.p.Dir+"/types/schema_test.go"] = out
 	return nil
+}
+
+// hasOneWay reports whether block b holds an unconfirmed (SEND) message.
+func (g *gen) hasOneWay(b Block) bool {
+	for _, m := range b.Messages {
+		if g.p.OneWay[m] {
+			return true
+		}
+	}
+	return false
 }

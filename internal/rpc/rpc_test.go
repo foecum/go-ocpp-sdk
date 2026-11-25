@@ -12,6 +12,9 @@ import (
 	"github.com/foecum/go-ocpp-sdk/ocppj"
 	"github.com/foecum/go-ocpp-sdk/v16"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
+	"github.com/foecum/go-ocpp-sdk/v21"
+	"github.com/foecum/go-ocpp-sdk/v21/diagnostics"
+	"github.com/foecum/go-ocpp-sdk/v21/types"
 )
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -99,5 +102,50 @@ func TestSafe(t *testing.T) {
 	}
 	if ce.Description == "" || ce.Description == "kaboom" {
 		t.Errorf("the panic value must not leak to the peer: %q", ce.Description)
+	}
+}
+
+func endpoint21(t *testing.T, send func(context.Context, []byte) error) *ocppj.Endpoint {
+	t.Helper()
+	reg, err := v21.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err := ocppj.NewEndpoint(ocppj.Config{Registry: reg, Send: send})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(ep.Close)
+	return ep
+}
+
+func TestSend(t *testing.T) {
+	var got []byte
+	ep := endpoint21(t, func(_ context.Context, f []byte) error { got = f; return nil })
+	msg := diagnostics.NotifyPeriodicEventStream{ID: 1, Basetime: ocpp.Now(), Data: []types.StreamDataElement{{V: "1"}}}
+	if err := rpc.Send(context.Background(), ep, msg); err != nil || len(got) == 0 || got[1] != '6' {
+		t.Fatalf("%s %v", got, err)
+	}
+	// Validation errors pass through.
+	if err := rpc.Send(context.Background(), ep, diagnostics.NotifyPeriodicEventStream{}); !errors.Is(err, ocpp.ErrValidation) {
+		t.Errorf("got %v", err)
+	}
+	// A closed endpoint means there is no connection.
+	ep.Close()
+	if err := rpc.Send(context.Background(), ep, msg); !errors.Is(err, ocpp.ErrNotConnected) {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestSafeSend(t *testing.T) {
+	boom := errors.New("boom")
+	if err := rpc.SafeSend(quiet, "X", func() error { return boom }); err != boom {
+		t.Errorf("got %v", err)
+	}
+	if err := rpc.SafeSend(quiet, "X", func() error { return nil }); err != nil {
+		t.Errorf("got %v", err)
+	}
+	if err := rpc.SafeSend(quiet, "X", func() error { panic("oops") }); err == nil {
+		t.Error("a panic must become an error")
 	}
 }

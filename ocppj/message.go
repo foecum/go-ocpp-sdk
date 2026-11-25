@@ -236,7 +236,9 @@ func Parse(v ocpp.Version, data []byte) (Message, error) {
 		return &CallResultErrorFrame{UniqueID: id, Code: code, Description: desc, Details: details}, nil
 	}
 	pe := &ParseError{Type: mt, ID: id, Err: fmt.Errorf("unknown message type %d", mt)}
-	if v != ocpp.V16 {
+	if v == ocpp.V201 {
+		// OCPP 2.1 errata 2026-09 (part 4, 4.1 and 4.3): an unknown message type is
+		// silently ignored and MessageTypeNotSupported is deprecated.
 		pe.Code = ocpp.MessageTypeNotSupported
 	}
 	return nil, pe

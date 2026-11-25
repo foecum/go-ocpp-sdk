@@ -14,6 +14,9 @@ import (
 	"github.com/foecum/go-ocpp-sdk/ocppj"
 	"github.com/foecum/go-ocpp-sdk/v16"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
+	"github.com/foecum/go-ocpp-sdk/v21"
+	"github.com/foecum/go-ocpp-sdk/v21/diagnostics"
+	"github.com/foecum/go-ocpp-sdk/v21/types"
 	"github.com/foecum/go-ocpp-sdk/ws"
 )
 
@@ -171,5 +174,50 @@ func TestConnectionIsRefusedIfItsEndpointCannotBeBuilt(t *testing.T) {
 	case <-hooks:
 		t.Error("hooks must not fire for a connection that never became a handle")
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// An OCPP 2.1 CSMS receives unconfirmed messages through DispatchSend and sends
+// its own with Send.
+func TestUnconfirmedMessages(t *testing.T) {
+	reg, err := v21.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan ocpp.Request, 1)
+	connected := make(chan *handle, 1)
+	_, url := newTestServer(t, func(c *Config[handle]) {
+		c.Version, c.Registry = ocpp.V21, reg
+		c.OnConnect = func(h *handle) { connected <- h }
+		c.DispatchSend = func(_ context.Context, _ *handle, m ocpp.Request) error { got <- m; return nil }
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, url+"/ocpp/CS1", &websocket.DialOptions{Subprotocols: []string{"ocpp2.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	h := <-connected
+
+	if err := c.Write(ctx, websocket.MessageText, []byte(`[6,"x1","NotifyPeriodicEventStream",{"id":3,"pending":0,"basetime":"2026-01-01T00:00:00Z","data":[{"t":0,"v":"1"}]}]`)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case m := <-got:
+		if m.(*diagnostics.NotifyPeriodicEventStream).ID != 3 {
+			t.Errorf("%+v", m)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("DispatchSend not called")
+	}
+
+	msg := diagnostics.NotifyPeriodicEventStream{ID: 8, Basetime: ocpp.Now(), Data: []types.StreamDataElement{{V: "1"}}}
+	if err := Send(ctx, h.Session, msg); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err := c.Read(ctx)
+	if err != nil || !strings.HasPrefix(string(data), `[6,"`) {
+		t.Fatalf("frame %s %v", data, err)
 	}
 }

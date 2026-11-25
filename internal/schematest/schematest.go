@@ -366,6 +366,13 @@ func CheckActions(t testing.TB, features []ocpp.Feature) {
 func CheckActionsSuffix(t testing.TB, features []ocpp.Feature, suffix string) {
 	t.Helper()
 	for _, f := range features {
+		if ocpp.IsOneWay(f) {
+			msg := reflect.New(f.RequestType()).Interface().(ocpp.Request)
+			if msg.Action() != f.Action() || f.RequestType().Name() != f.Action() || f.ResponseType() != nil {
+				t.Errorf("%s: unexpected one-way type %s reporting %q", f.Action(), f.RequestType().Name(), msg.Action())
+			}
+			continue
+		}
 		req := reflect.New(f.RequestType()).Interface().(ocpp.Request)
 		resp := reflect.New(f.ResponseType()).Interface().(ocpp.Response)
 		if req.Action() != f.Action() || resp.Action() != f.Action() {
@@ -418,6 +425,12 @@ func RunGenerated(t *testing.T, dir string, reg *ocppj.Registry, actions []strin
 	decodeResp := func(action string, payload []byte) (any, error) { return reg.DecodeResponse(action, payload) }
 	for _, action := range actions {
 		t.Run(action, func(t *testing.T) {
+			if f, ok := reg.Lookup(action); ok && ocpp.IsOneWay(f) {
+				// An unconfirmed message has one schema, named after the action.
+				msg := loadSchema(t, dir, action)
+				check(t, "message", msg, decodeReq, sampleJSON(t, msg.raw, false), sampleJSON(t, msg.raw, true), action)
+				return
+			}
 			req := loadSchema(t, dir, action+"Request")
 			resp := loadSchema(t, dir, action+"Response")
 			check(t, "request", req, decodeReq, sampleJSON(t, req.raw, false), sampleJSON(t, req.raw, true), action)

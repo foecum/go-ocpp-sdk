@@ -13,7 +13,7 @@ import (
 )
 
 func handledByStation(action string) bool {
-	d := gen.Directions[action]
+	d := gen.V201.Directions[action]
 	return d == gen.FromCSMS || d == gen.Both
 }
 
@@ -68,14 +68,14 @@ func TestDispatchAnswersNotSupportedWithoutAnImplementation(t *testing.T) {
 func TestHandlerInterfacesMatchTheDirections(t *testing.T) {
 	cfg := reflect.TypeOf(Config{})
 	seen := map[string]bool{}
-	for _, b := range gen.Blocks {
+	for _, b := range gen.V201.Blocks {
 		var want []string
 		for _, m := range b.Messages {
 			if handledByStation(m) {
 				want = append(want, m)
 			}
 		}
-		field, ok := cfg.FieldByName(gen.HandlerNames[b.Pkg])
+		field, ok := cfg.FieldByName(gen.V201.HandlerNames[b.Pkg])
 		if len(want) == 0 {
 			if ok {
 				t.Errorf("block %s has no messages for the station to handle but Config has a field for it", b.Pkg)
@@ -111,7 +111,7 @@ func TestEveryCallMethodFailsWhileDisconnected(t *testing.T) {
 	c := newStation(t, Config{})
 	called := 0
 	for _, f := range v201.Features() {
-		d := gen.Directions[f.Action()]
+		d := gen.V201.Directions[f.Action()]
 		if d != gen.FromStation && d != gen.Both {
 			continue
 		}

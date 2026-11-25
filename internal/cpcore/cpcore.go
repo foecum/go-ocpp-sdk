@@ -29,6 +29,9 @@ type Config struct {
 	Registry *ocppj.Registry
 	// Dispatch answers an incoming call.
 	Dispatch ocppj.RequestHandler
+	// DispatchSend handles an incoming unconfirmed (SEND) message, which OCPP 2.1
+	// has. Optional: without it such messages are dropped.
+	DispatchSend ocppj.SendHandler
 
 	URL          string
 	ID           string
@@ -94,6 +97,8 @@ func (s *Station) onConnect(conn *ws.Conn) {
 		Timeout:  s.cfg.CallTimeout,
 		Logger:   s.log,
 		Handler:  s.cfg.Dispatch,
+
+		SendHandler: s.cfg.DispatchSend,
 	})
 	if err != nil { // cannot happen: Registry and Send are set
 		s.log.Error("cannot create endpoint", "err", err)
@@ -170,4 +175,14 @@ func Call[Resp any](ctx context.Context, s *Station, req ocpp.Request) (*Resp, e
 		return nil, ocpp.ErrNotConnected
 	}
 	return rpc.Call[Resp](ctx, ep, req)
+}
+
+// Send sends msg to the CSMS as an unconfirmed (SEND) message, which OCPP 2.1
+// has. It returns ocpp.ErrNotConnected while there is no connection.
+func Send(ctx context.Context, s *Station, msg ocpp.Request) error {
+	ep := s.Endpoint()
+	if ep == nil {
+		return ocpp.ErrNotConnected
+	}
+	return rpc.Send(ctx, ep, msg)
 }
