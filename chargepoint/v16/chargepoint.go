@@ -13,6 +13,7 @@ import (
 	"github.com/foecum/go-ocpp-sdk/ocppj"
 	"github.com/foecum/go-ocpp-sdk/v16"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
+	"github.com/foecum/go-ocpp-sdk/v16/firmware"
 	"github.com/foecum/go-ocpp-sdk/ws"
 )
 
@@ -43,6 +44,14 @@ type Config struct {
 	// Core handles the Core profile calls the Central System sends. If nil,
 	// they are answered with NotSupported.
 	Core CoreHandler
+	// Firmware, LocalAuth, Reservation, SmartCharging and RemoteTrigger handle
+	// the calls of the other OCPP 1.6 profiles. Each is optional: calls of a
+	// profile without a handler are answered with NotSupported.
+	Firmware      FirmwareHandler
+	LocalAuth     LocalAuthHandler
+	Reservation   ReservationHandler
+	SmartCharging SmartChargingHandler
+	RemoteTrigger RemoteTriggerHandler
 	// CallTimeout is how long a call waits for the answer. Zero selects
 	// ocppj.DefaultTimeout (30 seconds).
 	CallTimeout time.Duration
@@ -225,4 +234,14 @@ func (c *ChargePoint) StatusNotification(ctx context.Context, req core.StatusNot
 // StopTransaction reports that a transaction ended.
 func (c *ChargePoint) StopTransaction(ctx context.Context, req core.StopTransactionRequest) (*core.StopTransactionConfirmation, error) {
 	return call[core.StopTransactionConfirmation](ctx, c, req)
+}
+
+// DiagnosticsStatusNotification reports the progress of a diagnostics upload.
+func (c *ChargePoint) DiagnosticsStatusNotification(ctx context.Context, req firmware.DiagnosticsStatusNotificationRequest) (*firmware.DiagnosticsStatusNotificationConfirmation, error) {
+	return call[firmware.DiagnosticsStatusNotificationConfirmation](ctx, c, req)
+}
+
+// FirmwareStatusNotification reports the progress of a firmware update.
+func (c *ChargePoint) FirmwareStatusNotification(ctx context.Context, req firmware.FirmwareStatusNotificationRequest) (*firmware.FirmwareStatusNotificationConfirmation, error) {
+	return call[firmware.FirmwareStatusNotificationConfirmation](ctx, c, req)
 }
