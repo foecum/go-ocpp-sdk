@@ -287,7 +287,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Generator for both 2.0.1 and 2.1 (`internal/gen`); `v21/types` and 19 block packages (91 messages)
 - [x] `csms/v21` and `chargepoint/v21`; `examples/v21/*`; load test, fuzz and benchmarks for 2.1
 - [x] Known gaps closed: spec-text constraints, appendices constants, 1.6 transaction message queue, CSMS `ForEach`
-- [ ] Tag `v1.1.0` (ask owner first)
+- [x] Tag `v1.1.0` (ask owner first)
 
 ## 8. Decisions
 

@@ -6,6 +6,8 @@ stable from 1.0.0 on and follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-26
+
 ### Added
 - OCPP 2.1: all 91 messages in 19 functional blocks, including the new blocks
   Bidirectional Power Transfer (`v21/bidirectional`), DER Control (`v21/dercontrol`)
