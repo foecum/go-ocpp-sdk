@@ -53,6 +53,7 @@ func (v SetDERControlRequest) Validate() error {
 		check.Optional("gradient", v.Gradient),
 		check.Optional("limitMaxDischarge", v.LimitMaxDischarge),
 		check.Optional("customData", v.CustomData),
+		check.Rule(v.ControlType == types.DERControlPowerMonitoringMustTrip, "controlType", "PowerMonitoringMustTrip is not a stand-alone DER control"),
 	)
 }
 

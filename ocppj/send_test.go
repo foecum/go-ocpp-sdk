@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -382,5 +383,92 @@ func TestReplyTruncatesCallResultErrorDescription(t *testing.T) {
 	ce, ok := r.next21(t).(*CallResultErrorFrame)
 	if !ok || len([]rune(ce.Description)) != MaxDescriptionLength {
 		t.Errorf("%#v", ce)
+	}
+}
+
+// Incoming SEND messages reach the handler one at a time and in the order they arrived.
+func TestIncomingSendsKeepTheirOrder(t *testing.T) {
+	var mu sync.Mutex
+	var order []int
+	running := 0
+	overlap := false
+	done := make(chan struct{})
+	r := rig21(t, func(c *Config) {
+		c.SendHandler = func(_ context.Context, m ocpp.Request) error {
+			mu.Lock()
+			running++
+			overlap = overlap || running > 1
+			mu.Unlock()
+			time.Sleep(time.Millisecond)
+			mu.Lock()
+			running--
+			order = append(order, m.(*streamMsg).ID)
+			if len(order) == 50 {
+				close(done)
+			}
+			mu.Unlock()
+			return nil
+		}
+	})
+	for i := 0; i < 50; i++ {
+		r.e.HandleFrame([]byte(fmt.Sprintf(`[6,"s%d","Stream",{"id":%d}]`, i, i)))
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not every SEND was handled")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if overlap {
+		t.Error("two SEND handlers ran at once")
+	}
+	for i, id := range order {
+		if id != i {
+			t.Fatalf("handled out of order: %v", order)
+		}
+	}
+}
+
+// A SEND queue that is full drops the newest message instead of blocking the connection.
+func TestIncomingSendQueueIsBounded(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var mu sync.Mutex
+	var got []int
+	r := rig21(t, func(c *Config) {
+		c.QueueSize = 2
+		c.SendHandler = func(_ context.Context, m ocpp.Request) error {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-release
+			mu.Lock()
+			got = append(got, m.(*streamMsg).ID)
+			mu.Unlock()
+			return nil
+		}
+	})
+	r.e.HandleFrame([]byte(`[6,"a","Stream",{"id":0}]`))
+	<-started // the first is in the handler; the queue is empty again
+	for i := 1; i <= 4; i++ {
+		r.e.HandleFrame([]byte(fmt.Sprintf(`[6,"s%d","Stream",{"id":%d}]`, i, i)))
+	}
+	close(release)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n == 3 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 3 || got[0] != 0 || got[1] != 1 || got[2] != 2 {
+		t.Errorf("handled %v, want [0 1 2] (4 and 3 dropped)", got)
 	}
 }

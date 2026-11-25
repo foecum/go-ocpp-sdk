@@ -547,6 +547,12 @@ func (v ChargingProfile) Validate() error {
 		check.Each("chargingSchedule", v.ChargingSchedule),
 		check.Length("priceScheduleSignature", v.PriceScheduleSignature, 256),
 		check.Optional("customData", v.CustomData),
+		check.Rule(v.TransactionID != "" && v.ChargingProfilePurpose != ChargingProfilePurposeTxProfile, "transactionId", "only allowed when chargingProfilePurpose is TxProfile"),
+		check.EachFn("chargingSchedule", v.ChargingSchedule, func(s ChargingSchedule) error {
+			return check.Rule(s.RandomizedDelay != nil && *s.RandomizedDelay != 0 &&
+				v.ChargingProfilePurpose != ChargingProfilePurposeTxProfile && v.ChargingProfilePurpose != ChargingProfilePurposeTxDefaultProfile,
+				"randomizedDelay", "only allowed for TxProfile and TxDefaultProfile")
+		}),
 	)
 }
 
@@ -645,6 +651,10 @@ func (v ChargingSchedulePeriod) Validate() error {
 		check.SliceItems("v2xSignalWattCurve", v.V2XSignalWattCurve, 1, 20),
 		check.Each("v2xSignalWattCurve", v.V2XSignalWattCurve),
 		check.Optional("customData", v.CustomData),
+		check.DecimalsPtr("limit", v.Limit, 1),
+		check.IntPtr("phaseToUse", v.PhaseToUse, check.Ptr(1), check.Ptr(3)),
+		check.Rule(len(v.V2XFreqWattCurve) == 1 || (v.OperationMode == OperationModeLocalFrequency && len(v.V2XFreqWattCurve) == 0), "v2xFreqWattCurve", "must contain at least two coordinates when operationMode is LocalFrequency"),
+		check.Rule(len(v.V2XSignalWattCurve) == 1, "v2xSignalWattCurve", "must contain at least two coordinates"),
 	)
 }
 
@@ -2076,6 +2086,8 @@ func (v LimitMaxDischarge) Validate() error {
 		check.Int("priority", v.Priority, check.Ptr(0), nil),
 		check.Optional("powerMonitoringMustTrip", v.PowerMonitoringMustTrip),
 		check.Optional("customData", v.CustomData),
+		check.Needed(v.PctMaxDischargePower == nil, "pctMaxDischargePower"),
+		check.NumberPtr("pctMaxDischargePower", v.PctMaxDischargePower, check.Ptr(0.0), check.Ptr(100.0)),
 	)
 }
 
@@ -2977,6 +2989,10 @@ func (v TariffConditionsFixed) Validate() error {
 		check.Length("paymentBrand", v.PaymentBrand, 20),
 		check.Length("paymentRecognition", v.PaymentRecognition, 20),
 		check.Optional("customData", v.CustomData),
+		check.TimeOfDay("startTimeOfDay", v.StartTimeOfDay),
+		check.TimeOfDay("endTimeOfDay", v.EndTimeOfDay),
+		check.Date("validFromDate", v.ValidFromDate),
+		check.Date("validToDate", v.ValidToDate),
 	)
 }
 
@@ -3075,6 +3091,10 @@ func (v TariffConditions) Validate() error {
 		check.Length("validToDate", v.ValidToDate, check.Unbounded),
 		check.Enum("evseKind", v.EVSEKind, false),
 		check.Optional("customData", v.CustomData),
+		check.TimeOfDay("startTimeOfDay", v.StartTimeOfDay),
+		check.TimeOfDay("endTimeOfDay", v.EndTimeOfDay),
+		check.Date("validFromDate", v.ValidFromDate),
+		check.Date("validToDate", v.ValidToDate),
 	)
 }
 
@@ -3710,6 +3730,7 @@ func (v VariableCharacteristics) Validate() error {
 		check.IntPtr("maxElements", v.MaxElements, check.Ptr(1), nil),
 		check.Length("valuesList", v.ValuesList, 1000),
 		check.Optional("customData", v.CustomData),
+		check.Needed(v.ValuesList == "" && (v.DataType == DataOptionList || v.DataType == DataMemberList || v.DataType == DataSequenceList), "valuesList"),
 	)
 }
 
@@ -3799,5 +3820,7 @@ func (v VoltageParams) Validate() error {
 	return check.First(
 		check.Enum("powerDuringCessation", v.PowerDuringCessation, false),
 		check.Optional("customData", v.CustomData),
+		check.Needed(v.Hv10MinMeanTripDelay != nil && v.Hv10MinMeanValue == nil, "hv10MinMeanValue"),
+		check.Needed(v.Hv10MinMeanValue != nil && v.Hv10MinMeanTripDelay == nil, "hv10MinMeanTripDelay"),
 	)
 }

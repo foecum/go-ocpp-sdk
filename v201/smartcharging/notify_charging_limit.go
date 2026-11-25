@@ -31,6 +31,7 @@ func (v NotifyChargingLimitRequest) Validate() error {
 		check.SliceItems("chargingSchedule", v.ChargingSchedule, 1, -1),
 		check.Each("chargingSchedule", v.ChargingSchedule),
 		check.Nested("chargingLimit", v.ChargingLimit),
+		check.Rule(v.EVSEID != nil && *v.EVSEID <= 0, "evseId", "must be greater than 0"),
 	)
 }
 

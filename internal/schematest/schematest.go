@@ -452,6 +452,9 @@ func sampleJSON(t *testing.T, schema map[string]any, full bool) string {
 // properties are included too.
 func sampleValue(schema map[string]any, full bool, name string) any {
 	if enum, ok := schema["enum"].([]any); ok && len(enum) > 0 {
+		if name == "chargingProfilePurpose" && full {
+			return "TxProfile" // the purpose the specification demands where a transactionId is given
+		}
 		if full {
 			return enum[len(enum)-1]
 		}
@@ -464,6 +467,12 @@ func sampleValue(schema map[string]any, full bool, name string) any {
 				return "2026-01-02T03:04:05.500Z"
 			}
 			return "2026-01-02T03:04:05Z"
+		}
+		switch name { // strings whose syntax the specification text fixes
+		case "startTimeOfDay", "endTimeOfDay":
+			return "00:00"
+		case "validFromDate", "validToDate":
+			return "2026-01-02"
 		}
 		n := 3
 		if max, ok := schema["maxLength"].(float64); ok && int(max) < n {
@@ -479,6 +488,9 @@ func sampleValue(schema map[string]any, full bool, name string) any {
 	case "array":
 		items, _ := schema["items"].(map[string]any)
 		count := 1
+		if name == "v2xFreqWattCurve" || name == "v2xSignalWattCurve" {
+			count = 2 // the specification asks for at least two coordinates
+		}
 		if min, ok := schema["minItems"].(float64); ok && int(min) > count {
 			count = int(min)
 		}

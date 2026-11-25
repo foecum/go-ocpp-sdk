@@ -201,3 +201,87 @@ func EachEnum[E interface {
 
 // Ptr returns a pointer to v, for the optional bounds of Int and Number.
 func Ptr[T any](v T) *T { return &v }
+
+// Rule fails with an invalid-value error for field when violated is true. It
+// expresses a constraint that the JSON schemas do not state but the
+// specification text does.
+func Rule(violated bool, field, reason string) error {
+	if violated {
+		return ocpp.Invalid(field, reason)
+	}
+	return nil
+}
+
+// Needed fails with a required-field error for field when missing is true: the
+// field is required under a condition the JSON schemas cannot express.
+func Needed(missing bool, field string) error {
+	if missing {
+		return ocpp.Required(field)
+	}
+	return nil
+}
+
+// EachFn runs fn on every element of an array; an error is prefixed with the
+// field and the element's index.
+func EachFn[T any](field string, items []T, fn func(T) error) error {
+	for i, item := range items {
+		if err := Prefix(fmt.Sprintf("%s[%d]", field, i), fn(item)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Decimals fails when v has more than n digits after the decimal point.
+func Decimals(field string, v float64, n int) error {
+	scale := math.Pow10(n)
+	if math.Abs(v*scale-math.Round(v*scale)) > 1e-6 {
+		return ocpp.Invalid(field, fmt.Sprintf("at most %d fractional digits allowed", n))
+	}
+	return nil
+}
+
+// DecimalsPtr is Decimals for an optional number: nil is fine.
+func DecimalsPtr(field string, v *float64, n int) error {
+	if v == nil {
+		return nil
+	}
+	return Decimals(field, *v, n)
+}
+
+// Date fails when a non-empty v is not a calendar date written "YYYY-MM-DD"
+// with a year from 1000 to 2999.
+func Date(field, v string) error {
+	if v == "" {
+		return nil
+	}
+	if len(v) == 10 && v[4] == '-' && v[7] == '-' && (v[0] == '1' || v[0] == '2') && digits(v[1:4]) && digits(v[5:7]) && digits(v[8:]) {
+		month, day := int(v[5]-'0')*10+int(v[6]-'0'), int(v[8]-'0')*10+int(v[9]-'0')
+		if month >= 1 && month <= 12 && day >= 1 && day <= 31 {
+			return nil
+		}
+	}
+	return ocpp.Invalid(field, "must be a date written YYYY-MM-DD")
+}
+
+func digits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// TimeOfDay fails when a non-empty v is not a 24-hour time of day written
+// "HH:MM" with leading zeros.
+func TimeOfDay(field, v string) error {
+	if v == "" {
+		return nil
+	}
+	if len(v) == 5 && v[2] == ':' && v[0] >= '0' && v[0] <= '2' && v[1] >= '0' && v[1] <= '9' && v[3] >= '0' && v[3] <= '5' && v[4] >= '0' && v[4] <= '9' &&
+		(v[0] != '2' || v[1] <= '3') {
+		return nil
+	}
+	return ocpp.Invalid(field, "must be a time of day written HH:MM")
+}

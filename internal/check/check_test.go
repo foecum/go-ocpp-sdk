@@ -155,3 +155,84 @@ func TestNestedValidation(t *testing.T) {
 		t.Error("Prefix text")
 	}
 }
+
+func TestRuleAndNeeded(t *testing.T) {
+	if err := check.Rule(false, "f", "why"); err != nil {
+		t.Error(err)
+	}
+	if err := check.Rule(true, "f", "why"); !errors.Is(err, ocpp.ErrValidation) {
+		t.Errorf("got %v", err)
+	}
+	if err := check.Needed(false, "f"); err != nil {
+		t.Error(err)
+	}
+	var ve *ocpp.ValidationError
+	if err := check.Needed(true, "f"); !errors.As(err, &ve) || !ve.Missing {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestEachFn(t *testing.T) {
+	fn := func(n int) error { return check.Rule(n < 0, "n", "negative") }
+	if err := check.EachFn("xs", []int{1, 2}, fn); err != nil {
+		t.Error(err)
+	}
+	err := check.EachFn("xs", []int{1, -2}, fn)
+	if err == nil || !strings.Contains(err.Error(), "xs[1].n") {
+		t.Errorf("got %v", err)
+	}
+	if err := check.EachFn("xs", []int(nil), fn); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDecimals(t *testing.T) {
+	for _, v := range []float64{0, 8, 8.1, -8.1, 10.5, 1e6} {
+		if err := check.Decimals("limit", v, 1); err != nil {
+			t.Errorf("%v: %v", v, err)
+		}
+	}
+	for _, v := range []float64{8.14, 0.05, -3.333} {
+		if err := check.Decimals("limit", v, 1); err == nil {
+			t.Errorf("%v must be rejected", v)
+		}
+	}
+}
+
+func TestDecimalsPtr(t *testing.T) {
+	if err := check.DecimalsPtr("limit", nil, 1); err != nil {
+		t.Error(err)
+	}
+	if err := check.DecimalsPtr("limit", check.Ptr(8.1), 1); err != nil {
+		t.Error(err)
+	}
+	if err := check.DecimalsPtr("limit", check.Ptr(8.14), 1); err == nil {
+		t.Error("8.14 must be rejected")
+	}
+}
+
+func TestTimeOfDay(t *testing.T) {
+	for _, v := range []string{"", "00:00", "09:30", "19:59", "23:59"} {
+		if err := check.TimeOfDay("t", v); err != nil {
+			t.Errorf("%q: %v", v, err)
+		}
+	}
+	for _, v := range []string{"24:00", "9:30", "12:60", "12-30", "1230", "12:3", "29:00", "ab:cd", "12:300"} {
+		if err := check.TimeOfDay("t", v); err == nil {
+			t.Errorf("%q must be rejected", v)
+		}
+	}
+}
+
+func TestDate(t *testing.T) {
+	for _, v := range []string{"", "2026-01-02", "1999-12-31", "2999-02-31"} {
+		if err := check.Date("d", v); err != nil {
+			t.Errorf("%q: %v", v, err)
+		}
+	}
+	for _, v := range []string{"2026-1-02", "2026-13-01", "2026-00-10", "2026-01-00", "2026-01-32", "0999-01-01", "3000-01-01", "2026/01/02", "2026-0a-02", "20260102", "2026-01-0x"} {
+		if err := check.Date("d", v); err == nil {
+			t.Errorf("%q must be rejected", v)
+		}
+	}
+}

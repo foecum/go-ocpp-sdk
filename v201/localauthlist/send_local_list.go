@@ -31,6 +31,9 @@ func (v SendLocalListRequest) Validate() error {
 		check.SliceItems("localAuthorizationList", v.LocalAuthorizationList, 1, -1),
 		check.Each("localAuthorizationList", v.LocalAuthorizationList),
 		check.Enum("updateType", v.UpdateType, true),
+		check.EachFn("localAuthorizationList", v.LocalAuthorizationList, func(a types.AuthorizationData) error {
+			return check.Needed(v.UpdateType == types.UpdateFull && a.IDTokenInfo == nil, "idTokenInfo")
+		}),
 	)
 }
 

@@ -36,6 +36,7 @@ func (v NotifyDERAlarmRequest) Validate() error {
 		check.Time("timestamp", v.Timestamp),
 		check.Length("extraInfo", v.ExtraInfo, 200),
 		check.Optional("customData", v.CustomData),
+		check.Rule(v.ControlType == types.DERControlPowerMonitoringMustTrip, "controlType", "PowerMonitoringMustTrip is not a stand-alone DER control"),
 	)
 }
 

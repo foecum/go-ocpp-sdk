@@ -31,6 +31,7 @@ func (v NotifyEVChargingScheduleRequest) Validate() error {
 		check.Optional("customData", v.CustomData),
 		check.Time("timeBase", v.TimeBase),
 		check.Nested("chargingSchedule", v.ChargingSchedule),
+		check.Rule(v.EVSEID <= 0, "evseId", "must be greater than 0"),
 	)
 }
 

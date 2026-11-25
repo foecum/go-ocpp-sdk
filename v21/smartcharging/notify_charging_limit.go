@@ -32,6 +32,7 @@ func (v NotifyChargingLimitRequest) Validate() error {
 		check.IntPtr("evseId", v.EVSEID, check.Ptr(0), nil),
 		check.Nested("chargingLimit", v.ChargingLimit),
 		check.Optional("customData", v.CustomData),
+		check.Rule(v.EVSEID != nil && *v.EVSEID <= 0, "evseId", "must be greater than 0"),
 	)
 }
 

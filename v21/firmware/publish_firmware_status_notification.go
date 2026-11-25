@@ -36,6 +36,7 @@ func (v PublishFirmwareStatusNotificationRequest) Validate() error {
 		check.IntPtr("requestId", v.RequestID, check.Ptr(0), nil),
 		check.Optional("statusInfo", v.StatusInfo),
 		check.Optional("customData", v.CustomData),
+		check.Needed(v.Status == types.PublishFirmwareStatusPublished && len(v.Location) == 0, "location"),
 	)
 }
 

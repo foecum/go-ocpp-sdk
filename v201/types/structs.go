@@ -274,6 +274,7 @@ func (v ChargingProfile) Validate() error {
 		check.Items("chargingSchedule", len(v.ChargingSchedule), 1, 3),
 		check.Each("chargingSchedule", v.ChargingSchedule),
 		check.Length("transactionId", v.TransactionID, 36),
+		check.Rule(v.TransactionID != "" && v.ChargingProfilePurpose != ChargingProfilePurposeTxProfile, "transactionId", "only allowed when chargingProfilePurpose is TxProfile"),
 	)
 }
 
@@ -305,6 +306,8 @@ type ChargingSchedulePeriod struct {
 func (v ChargingSchedulePeriod) Validate() error {
 	return check.First(
 		check.Optional("customData", v.CustomData),
+		check.Decimals("limit", v.Limit, 1),
+		check.IntPtr("phaseToUse", v.PhaseToUse, check.Ptr(1), check.Ptr(3)),
 	)
 }
 
@@ -1502,6 +1505,7 @@ func (v VariableCharacteristics) Validate() error {
 		check.Length("unit", v.Unit, 16),
 		check.Enum("dataType", v.DataType, true),
 		check.Length("valuesList", v.ValuesList, 1000),
+		check.Needed(v.ValuesList == "" && (v.DataType == DataOptionList || v.DataType == DataMemberList || v.DataType == DataSequenceList), "valuesList"),
 	)
 }
 

@@ -31,6 +31,7 @@ func (v GetDERControlRequest) Validate() error {
 		check.Enum("controlType", v.ControlType, false),
 		check.Length("controlId", v.ControlID, 36),
 		check.Optional("customData", v.CustomData),
+		check.Rule(v.ControlType == types.DERControlPowerMonitoringMustTrip, "controlType", "PowerMonitoringMustTrip is not a stand-alone DER control"),
 	)
 }
 

@@ -37,6 +37,8 @@ func (v RequestStartTransactionRequest) Validate() error {
 		check.Nested("idToken", v.IDToken),
 		check.Optional("chargingProfile", v.ChargingProfile),
 		check.Optional("customData", v.CustomData),
+		check.Rule(v.EVSEID != nil && *v.EVSEID <= 0, "evseId", "must be greater than 0"),
+		check.Rule(v.ChargingProfile != nil && v.ChargingProfile.ChargingProfilePurpose != types.ChargingProfilePurposeTxProfile, "chargingProfile.chargingProfilePurpose", "must be TxProfile"),
 	)
 }
 

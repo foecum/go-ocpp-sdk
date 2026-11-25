@@ -32,6 +32,7 @@ func (v PublishFirmwareStatusNotificationRequest) Validate() error {
 		check.Enum("status", v.Status, true),
 		check.SliceItems("location", v.Location, 1, -1),
 		check.EachString("location", v.Location, 512),
+		check.Needed(v.Status == types.PublishFirmwareStatusPublished && len(v.Location) == 0, "location"),
 	)
 }
 

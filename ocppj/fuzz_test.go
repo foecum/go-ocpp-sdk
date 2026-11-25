@@ -79,8 +79,8 @@ func FuzzEndpointHandleFrame(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string) {
 		sent := make(chan []byte, 16)
 		e, err := NewEndpoint(Config{
-			Registry: newRegistry21(t),
-			Timeout:  50 * time.Millisecond,
+			Registry:    newRegistry21(t),
+			Timeout:     50 * time.Millisecond,
 			SendHandler: func(context.Context, ocpp.Request) error { return nil },
 			Send: func(_ context.Context, frame []byte) error {
 				select {

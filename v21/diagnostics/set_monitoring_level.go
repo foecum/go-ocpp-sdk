@@ -37,6 +37,7 @@ func (v SetMonitoringLevelRequest) Validate() error {
 	return check.First(
 		check.Int("severity", v.Severity, check.Ptr(0), nil),
 		check.Optional("customData", v.CustomData),
+		check.Int("severity", v.Severity, check.Ptr(0), check.Ptr(9)),
 	)
 }
 

@@ -31,6 +31,9 @@ func (v SendLocalListRequest) Validate() error {
 		check.Each("localAuthorizationList", v.LocalAuthorizationList),
 		check.Enum("updateType", v.UpdateType, true),
 		check.Optional("customData", v.CustomData),
+		check.EachFn("localAuthorizationList", v.LocalAuthorizationList, func(a types.AuthorizationData) error {
+			return check.Needed(v.UpdateType == types.UpdateFull && a.IDTokenInfo == nil, "idTokenInfo")
+		}),
 	)
 }
 

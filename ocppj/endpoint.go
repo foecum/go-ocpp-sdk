@@ -104,6 +104,11 @@ type Endpoint struct {
 	current *pending
 	queue   []*pending
 	closed  bool
+
+	// Incoming SEND messages are handled one at a time, in arrival order, because
+	// the values of a stream only make sense in order.
+	sends      []*Send
+	sendActive bool // a goroutine is draining sends
 }
 
 // NewEndpoint creates an Endpoint.
@@ -328,17 +333,7 @@ func (e *Endpoint) HandleFrame(data []byte) {
 			e.serve(m)
 		}()
 	case *Send:
-		e.mu.Lock()
-		if e.closed {
-			e.mu.Unlock()
-			return
-		}
-		e.wg.Add(1)
-		e.mu.Unlock()
-		go func() {
-			defer e.wg.Done()
-			e.serveSend(m)
-		}()
+		e.enqueueSend(m)
 	case *CallResultErrorFrame:
 		e.log.Warn("ocppj: peer could not process our response", "id", m.UniqueID, "code", m.Code, "description", m.Description)
 		if e.resultH != nil {
@@ -376,6 +371,47 @@ func (e *Endpoint) complete(id string, result func(*pending) (ocpp.Response, err
 	e.mu.Unlock()
 	p.finish(result(p))
 	e.pump()
+}
+
+// enqueueSend queues an incoming SEND for the goroutine that hands them to the
+// handler in order. When more than the queue size are waiting, the newest is dropped.
+func (e *Endpoint) enqueueSend(m *Send) {
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return
+	}
+	if len(e.sends) >= e.maxQueue {
+		e.mu.Unlock()
+		e.log.Warn("ocppj: dropping SEND, queue full", "action", m.Action)
+		return
+	}
+	e.sends = append(e.sends, m)
+	if e.sendActive {
+		e.mu.Unlock()
+		return
+	}
+	e.sendActive = true
+	e.wg.Add(1)
+	e.mu.Unlock()
+	go e.drainSends()
+}
+
+// drainSends hands the queued SEND messages to the handler, one after another.
+func (e *Endpoint) drainSends() {
+	defer e.wg.Done()
+	for {
+		e.mu.Lock()
+		if e.closed || len(e.sends) == 0 {
+			e.sends, e.sendActive = nil, false
+			e.mu.Unlock()
+			return
+		}
+		m := e.sends[0]
+		e.sends = e.sends[1:]
+		e.mu.Unlock()
+		e.serveSend(m)
+	}
 }
 
 // rejectResult answers a CALLRESULT we could not decode with a CALLRESULTERROR,

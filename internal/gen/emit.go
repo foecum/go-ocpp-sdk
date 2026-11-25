@@ -235,6 +235,9 @@ func (g *gen) structBody(def, goName string, n *node, qual string) (string, erro
 			checks = append(checks, f.check)
 		}
 	}
+	for _, rule := range g.p.Rules[def] {
+		checks = append(checks, strings.ReplaceAll(rule, "{T}", qual))
+	}
 	var sb strings.Builder
 	sb.WriteString("{\n" + fields.String() + "}\n\n")
 	return sb.String() + validateMethod(goName, checks), nil

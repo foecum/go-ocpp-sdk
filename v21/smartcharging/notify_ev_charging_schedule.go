@@ -39,6 +39,7 @@ func (v NotifyEVChargingScheduleRequest) Validate() error {
 		check.Int("evseId", v.EVSEID, check.Ptr(1), nil),
 		check.IntPtr("selectedChargingScheduleId", v.SelectedChargingScheduleID, check.Ptr(0), nil),
 		check.Optional("customData", v.CustomData),
+		check.Rule(v.EVSEID <= 0, "evseId", "must be greater than 0"),
 	)
 }
 
