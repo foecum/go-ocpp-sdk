@@ -334,6 +334,12 @@ func TestClientDetectsDeadServerWithPing(t *testing.T) {
 		t.Errorf("got %v", d.err)
 	}
 	recv(t, rec.connected) // and it reconnects
+	// The server's handler counts the connection in its own goroutine, which may
+	// run a moment after the client reports it, so wait for it.
+	deadline := time.Now().Add(3 * time.Second)
+	for accepted.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	if accepted.Load() < 2 {
 		t.Errorf("accepted %d connections", accepted.Load())
 	}
