@@ -29,6 +29,10 @@ type Config struct {
 	// Core handles the Core profile calls charge points send. If nil, they are
 	// answered with NotSupported.
 	Core CoreHandler
+	// Firmware handles the Firmware Management profile calls (diagnostics and
+	// firmware status notifications). If nil, they are answered with
+	// NotSupported.
+	Firmware FirmwareHandler
 	// Authenticator checks every connection request. See ws.BasicAuthenticator
 	// and ws.ClientCertAuthenticator. Without one anyone may connect: use only
 	// on trusted networks.
