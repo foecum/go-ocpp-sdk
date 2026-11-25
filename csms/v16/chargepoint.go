@@ -4,8 +4,7 @@ import (
 	"context"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
-	"github.com/foecum/go-ocpp-sdk/internal/rpc"
-	"github.com/foecum/go-ocpp-sdk/ocppj"
+	"github.com/foecum/go-ocpp-sdk/internal/csmscore"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
 	"github.com/foecum/go-ocpp-sdk/v16/firmware"
 	"github.com/foecum/go-ocpp-sdk/v16/localauth"
@@ -13,36 +12,20 @@ import (
 	"github.com/foecum/go-ocpp-sdk/v16/reservation"
 	"github.com/foecum/go-ocpp-sdk/v16/security"
 	"github.com/foecum/go-ocpp-sdk/v16/smartcharging"
-	"github.com/foecum/go-ocpp-sdk/ws"
 )
 
 // ChargePoint is one connected charge point. It is tied to a single
 // connection: after the charge point reconnects, look it up again with
 // CSMS.ChargePoint. It is safe for concurrent use.
+//
+// The embedded session provides ID, Version (always ocpp.V16), RemoteAddr, Done
+// and Close.
 type ChargePoint struct {
-	id   string
-	conn *ws.Conn
-	ep   *ocppj.Endpoint
+	*csmscore.Session
 }
 
-// ID returns the charge point identity from the connection URL.
-func (cp *ChargePoint) ID() string { return cp.id }
-
-// Version returns the OCPP version of the connection, always ocpp.V16.
-func (cp *ChargePoint) Version() ocpp.Version { return cp.conn.Version() }
-
-// RemoteAddr returns the charge point's network address.
-func (cp *ChargePoint) RemoteAddr() string { return cp.conn.RemoteAddr() }
-
-// Done is closed when the connection has ended.
-func (cp *ChargePoint) Done() <-chan struct{} { return cp.conn.Done() }
-
-// Close closes the connection gracefully. The charge point will normally
-// reconnect.
-func (cp *ChargePoint) Close() error { return cp.conn.Close() }
-
 func call[Resp any](ctx context.Context, cp *ChargePoint, req ocpp.Request) (*Resp, error) {
-	return rpc.Call[Resp](ctx, cp.ep, req)
+	return csmscore.Call[Resp](ctx, cp.Session, req)
 }
 
 // ChangeAvailability asks the charge point to change a connector's (or its own)

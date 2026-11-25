@@ -5,12 +5,10 @@ import (
 	"crypto/tls"
 	"io"
 	"log/slog"
-	"sync"
 	"time"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
-	"github.com/foecum/go-ocpp-sdk/internal/rpc"
-	"github.com/foecum/go-ocpp-sdk/ocppj"
+	"github.com/foecum/go-ocpp-sdk/internal/cpcore"
 	"github.com/foecum/go-ocpp-sdk/v16"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
 	"github.com/foecum/go-ocpp-sdk/v16/firmware"
@@ -18,12 +16,9 @@ import (
 	"github.com/foecum/go-ocpp-sdk/ws"
 )
 
-// Seams for tests. These calls cannot fail with the fixed arguments used here,
-// so tests replace them to exercise the error paths.
-var (
-	newRegistry = v16.NewRegistry
-	newEndpoint = ocppj.NewEndpoint
-)
+// newRegistry is a seam for tests: it cannot fail, so tests replace it to
+// exercise the error path.
+var newRegistry = v16.NewRegistry
 
 // Config configures a ChargePoint.
 type Config struct {
@@ -75,15 +70,14 @@ type Config struct {
 
 // ChargePoint is an OCPP 1.6 charging station connected to a Central System.
 // It is safe for concurrent use.
+//
+// Run connects and keeps the connection up (reconnecting with back-off) until
+// its context ends or Close is called; Connected and WaitConnected report the
+// state of the connection.
 type ChargePoint struct {
-	cfg    Config
-	log    *slog.Logger
-	reg    *ocppj.Registry
-	client *ws.Client
-
-	mu sync.Mutex
-	ep *ocppj.Endpoint // current connection's endpoint, nil while disconnected
-	up chan struct{}   // closed while connected; replaced on disconnect
+	*cpcore.Station
+	cfg Config
+	log *slog.Logger
 }
 
 // New validates cfg and creates a ChargePoint. It does not connect: call Run.
@@ -96,20 +90,22 @@ func New(cfg Config) (*ChargePoint, error) {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	c := &ChargePoint{cfg: cfg, log: log, reg: reg, up: make(chan struct{})}
-	c.client, err = ws.NewClient(ws.ClientConfig{
+	c := &ChargePoint{cfg: cfg, log: log}
+	c.Station, err = cpcore.New(cpcore.Config{
+		Version:      ocpp.V16,
+		Registry:     reg,
+		Dispatch:     c.dispatch,
 		URL:          cfg.URL,
 		ID:           cfg.ID,
-		Versions:     []ocpp.Version{ocpp.V16},
 		Password:     cfg.Password,
 		TLSConfig:    cfg.TLSConfig,
 		Reconnect:    cfg.Reconnect,
-		OnConnect:    c.onConnect,
-		OnFrame:      c.onFrame,
-		OnDisconnect: c.onDisconnect,
+		CallTimeout:  cfg.CallTimeout,
 		PingInterval: cfg.PingInterval,
 		PongTimeout:  cfg.PongTimeout,
 		ReadLimit:    cfg.ReadLimit,
+		OnConnect:    cfg.OnConnect,
+		OnDisconnect: cfg.OnDisconnect,
 		Logger:       log,
 	})
 	if err != nil {
@@ -118,85 +114,8 @@ func New(cfg Config) (*ChargePoint, error) {
 	return c, nil
 }
 
-func (c *ChargePoint) onConnect(conn *ws.Conn) {
-	ep, err := newEndpoint(ocppj.Config{
-		Registry: c.reg,
-		Send:     conn.Write,
-		Timeout:  c.cfg.CallTimeout,
-		Logger:   c.log,
-		Handler:  c.dispatch,
-	})
-	if err != nil { // cannot happen: Registry and Send are set
-		c.log.Error("cannot create endpoint", "err", err)
-		_ = conn.Close()
-		return
-	}
-	c.mu.Lock()
-	c.ep = ep
-	close(c.up)
-	c.mu.Unlock()
-	if c.cfg.OnConnect != nil {
-		c.cfg.OnConnect()
-	}
-}
-
-func (c *ChargePoint) onFrame(_ *ws.Conn, frame []byte) {
-	if ep := c.endpoint(); ep != nil {
-		ep.HandleFrame(frame)
-	}
-}
-
-func (c *ChargePoint) onDisconnect(_ *ws.Conn, err error) {
-	c.mu.Lock()
-	ep := c.ep
-	c.ep = nil
-	c.up = make(chan struct{})
-	c.mu.Unlock()
-	if ep != nil {
-		ep.Close() // fails calls still waiting for the Central System
-	}
-	if c.cfg.OnDisconnect != nil {
-		c.cfg.OnDisconnect(err)
-	}
-}
-
-func (c *ChargePoint) endpoint() *ocppj.Endpoint {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.ep
-}
-
-// Run connects to the Central System and keeps the connection up, reconnecting
-// with back-off after any failure, until ctx ends or Close is called. It
-// returns ocpp.ErrClosed after Close, or ctx's error. Call it once, usually in
-// its own goroutine.
-func (c *ChargePoint) Run(ctx context.Context) error { return c.client.Run(ctx) }
-
-// Close disconnects gracefully, stops reconnecting and waits for Run to return.
-func (c *ChargePoint) Close() error { return c.client.Close() }
-
-// Connected reports whether the charge point is connected right now.
-func (c *ChargePoint) Connected() bool { return c.endpoint() != nil }
-
-// WaitConnected blocks until the charge point is connected or ctx ends.
-func (c *ChargePoint) WaitConnected(ctx context.Context) error {
-	c.mu.Lock()
-	up := c.up
-	c.mu.Unlock()
-	select {
-	case <-up:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
 func call[Resp any](ctx context.Context, c *ChargePoint, req ocpp.Request) (*Resp, error) {
-	ep := c.endpoint()
-	if ep == nil {
-		return nil, ocpp.ErrNotConnected
-	}
-	return rpc.Call[Resp](ctx, ep, req)
+	return cpcore.Call[Resp](ctx, c.Station, req)
 }
 
 // Authorize asks the Central System whether an identifier may charge.

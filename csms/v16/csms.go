@@ -7,22 +7,17 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
-	"github.com/foecum/go-ocpp-sdk/ocppj"
+	"github.com/foecum/go-ocpp-sdk/internal/csmscore"
 	"github.com/foecum/go-ocpp-sdk/v16"
 	"github.com/foecum/go-ocpp-sdk/ws"
 )
 
-// Seams for tests. These calls cannot fail with the fixed arguments used here,
-// so tests replace them to exercise the error paths.
-var (
-	newRegistry = v16.NewRegistry
-	newEndpoint = ocppj.NewEndpoint
-	newWSServer = ws.NewServer
-)
+// newRegistry is a seam for tests: it cannot fail, so tests replace it to
+// exercise the error path.
+var newRegistry = v16.NewRegistry
 
 // Config configures a CSMS. Every field is optional.
 type Config struct {
@@ -67,9 +62,7 @@ type Config struct {
 type CSMS struct {
 	cfg Config
 	log *slog.Logger
-	reg *ocppj.Registry
-	ws  *ws.Server
-	cps sync.Map // *ws.Conn -> *ChargePoint
+	srv *csmscore.Server[ChargePoint]
 }
 
 // New creates a CSMS.
@@ -82,94 +75,51 @@ func New(cfg Config) (*CSMS, error) {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	s := &CSMS{cfg: cfg, log: log, reg: reg}
-	s.ws, err = newWSServer(ws.ServerConfig{
-		Versions:      []ocpp.Version{ocpp.V16},
+	s := &CSMS{cfg: cfg, log: log}
+	core := csmscore.Config[ChargePoint]{
+		Version:   ocpp.V16,
+		Registry:  reg,
+		NewHandle: func(sess *csmscore.Session) *ChargePoint { return &ChargePoint{Session: sess} },
+		Dispatch: func(ctx context.Context, cp *ChargePoint, req ocpp.Request) (ocpp.Response, error) {
+			return s.dispatch(ctx, cp, req)
+		},
 		Authenticator: cfg.Authenticator,
 		TLSConfig:     cfg.TLSConfig,
-		OnConnect:     s.onConnect,
-		OnFrame:       s.onFrame,
-		OnDisconnect:  s.onDisconnect,
+		CallTimeout:   cfg.CallTimeout,
 		PingInterval:  cfg.PingInterval,
 		PongTimeout:   cfg.PongTimeout,
 		ReadLimit:     cfg.ReadLimit,
+		OnConnect:     cfg.OnConnect,
 		Logger:        log,
-	})
+	}
+	if cfg.OnDisconnect != nil {
+		core.OnDisconnect = cfg.OnDisconnect
+	}
+	s.srv, err = csmscore.New(core)
 	if err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (s *CSMS) onConnect(c *ws.Conn) {
-	cp := &ChargePoint{id: c.ID(), conn: c}
-	ep, err := newEndpoint(ocppj.Config{
-		Registry: s.reg,
-		Send:     c.Write,
-		Timeout:  s.cfg.CallTimeout,
-		Logger:   s.log.With("charge_point", c.ID()),
-		Handler: func(ctx context.Context, req ocpp.Request) (ocpp.Response, error) {
-			return s.dispatch(ctx, cp, req)
-		},
-	})
-	if err != nil { // cannot happen: Registry and Send are set
-		s.log.Error("cannot create endpoint", "charge_point", c.ID(), "err", err)
-		_ = c.Close()
-		return
-	}
-	cp.ep = ep
-	s.cps.Store(c, cp)
-	if s.cfg.OnConnect != nil {
-		s.cfg.OnConnect(cp)
-	}
-}
-
-func (s *CSMS) onFrame(c *ws.Conn, frame []byte) {
-	if v, ok := s.cps.Load(c); ok {
-		v.(*ChargePoint).ep.HandleFrame(frame)
-	}
-}
-
-func (s *CSMS) onDisconnect(c *ws.Conn, err error) {
-	v, ok := s.cps.LoadAndDelete(c)
-	if !ok {
-		return
-	}
-	cp := v.(*ChargePoint)
-	cp.ep.Close() // fails calls still waiting for this charge point
-	if s.cfg.OnDisconnect != nil {
-		s.cfg.OnDisconnect(cp, err)
-	}
-}
-
 // ServeHTTP performs the WebSocket handshake for a charge point. The identity
 // is the last path segment of the URL.
-func (s *CSMS) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.ws.ServeHTTP(w, r) }
+func (s *CSMS) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.srv.ServeHTTP(w, r) }
 
 // ListenAndServe listens on addr and serves until Shutdown. It returns
 // http.ErrServerClosed after a graceful Shutdown.
-func (s *CSMS) ListenAndServe(addr string) error { return s.ws.ListenAndServe(addr) }
+func (s *CSMS) ListenAndServe(addr string) error { return s.srv.ListenAndServe(addr) }
 
 // Serve accepts connections on l until Shutdown. It returns http.ErrServerClosed
 // after a graceful Shutdown.
-func (s *CSMS) Serve(l net.Listener) error { return s.ws.Serve(l) }
+func (s *CSMS) Serve(l net.Listener) error { return s.srv.Serve(l) }
 
 // Shutdown stops accepting connections and closes every charge point
 // connection gracefully. If ctx ends first the rest are cut.
-func (s *CSMS) Shutdown(ctx context.Context) error { return s.ws.Shutdown(ctx) }
+func (s *CSMS) Shutdown(ctx context.Context) error { return s.srv.Shutdown(ctx) }
 
 // ChargePoint returns the connected charge point with the given identity.
-func (s *CSMS) ChargePoint(id string) (*ChargePoint, bool) {
-	c, ok := s.ws.Conn(id)
-	if !ok {
-		return nil, false
-	}
-	v, ok := s.cps.Load(c)
-	if !ok {
-		return nil, false
-	}
-	return v.(*ChargePoint), true
-}
+func (s *CSMS) ChargePoint(id string) (*ChargePoint, bool) { return s.srv.Lookup(id) }
 
 // ChargePoints returns the identities of all connected charge points, sorted.
-func (s *CSMS) ChargePoints() []string { return s.ws.IDs() }
+func (s *CSMS) ChargePoints() []string { return s.srv.IDs() }
