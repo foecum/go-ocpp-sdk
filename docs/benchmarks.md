@@ -49,3 +49,17 @@ connected stations. The heap figure counts the server side and the simulated
 station together, so a CSMS alone needs about half of it. The one-station row is
 slower per call because a single connection serializes its calls (OCPP allows
 one outstanding CALL per direction).
+
+## Load test
+
+`go run ./examples/loadtest -stations 1000 -duration 10s -session-every 2s` runs a
+CSMS and 1,000 simulated stations in one process (boot, a heartbeat per second,
+and a charging session every 2 s, which is 4 messages in 1.6 and 4 in 2.0.1):
+
+| Version | Connect all | Errors | p50 | p95 | p99 |
+|---|---|---|---|---|---|
+| 1.6 | 0.21 s | 0 | 98 µs | 8.0 ms | 12 ms |
+| 2.0.1 | 0.21 s | 0 | 100 µs | 8.4 ms | 12 ms |
+
+The tail latency is mostly scheduling: 2,000 busy sockets and goroutines on 8 CPUs
+in a single process. 1,000 stations need about 2,000 file descriptors.

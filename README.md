@@ -318,6 +318,13 @@ The station runs sessions as `TransactionEvent`s (Started, Updated, Ended); the
 Central System reads and sets a variable with `GetVariables` / `SetVariables`
 and, with `-remote-start`, starts and stops a session remotely.
 
+### Load test
+
+`go run ./examples/loadtest -stations 1000 -duration 30s` runs a CSMS and 1,000
+simulated stations in one process (`-version 2.0.1` for OCPP 2.0.1) and prints
+throughput and latency. Indicative benchmark results are in
+[docs/benchmarks.md](docs/benchmarks.md).
+
 ## Packages
 
 | Package | Purpose |

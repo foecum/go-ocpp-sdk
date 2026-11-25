@@ -531,6 +531,11 @@ level=INFO msg="transaction event" id=CS001 event=Updated transaction=CS001-1 se
 level=INFO msg="request stop transaction" id=CS001 transaction=CS001-1 status=Accepted
 level=INFO msg="transaction event" id=CS001 event=Ended transaction=CS001-1 seq=4 trigger=RemoteStop state=Idle</code></pre></div>
       <p>The flags are the same as for 1.6, plus <code>-remote-start</code> on the Central System. The test suite builds and runs this pair too.</p>
+      <h3>Load test</h3>
+      <p><code>examples/loadtest</code> runs a Central System and many simulated stations in one process over loopback WebSockets, for either version, and reports throughput and latency percentiles:</p>
+      <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go run ./examples/loadtest -stations 1000 -duration 30s
+go run ./examples/loadtest -stations 1000 -version 2.0.1</code></pre></div>
+      <p>1,000 stations need about 2,000 sockets, so raise <code>ulimit -n</code> if the run fails to connect. On the author's 8-core machine, 1,000 stations connect in about 0.2 s with no errors. Treat the figures as indicative: both ends share one process.</p>
     </section>
 
     <section id="messages">
