@@ -196,7 +196,7 @@ func TestChargingSessionScenario(t *testing.T) {
 	if !ok {
 		t.Fatal("station not listed")
 	}
-	if ids := srv.ChargePoints(); len(ids) != 1 || ids[0] != "CS001" {
+	if ids := srv.ChargePointIDs(); len(ids) != 1 || ids[0] != "CS001" {
 		t.Errorf("ids %v", ids)
 	}
 	if _, ok := srv.ChargePoint("nobody"); ok {

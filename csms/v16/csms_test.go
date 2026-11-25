@@ -423,7 +423,7 @@ func TestDuplicateIdentityReplacesOldConnection(t *testing.T) {
 	if d.cp != oldHandle || !errors.Is(d.err, ws.ErrReplaced) {
 		t.Errorf("old connection ended with %v", d.err)
 	}
-	if got := srv.ChargePoints(); len(got) != 1 || got[0] != "CS1" {
+	if got := srv.ChargePointIDs(); len(got) != 1 || got[0] != "CS1" {
 		t.Errorf("connected: %v", got)
 	}
 	// The old handle is dead, the old station knows it.
@@ -449,8 +449,8 @@ func TestChargePointHandleAndListing(t *testing.T) {
 		startStation(t, url, id, nil)
 		recv(t, ev.connected)
 	}
-	if got := srv.ChargePoints(); fmt.Sprint(got) != "[A B C]" {
-		t.Errorf("ChargePoints() = %v", got)
+	if got := srv.ChargePointIDs(); fmt.Sprint(got) != "[A B C]" {
+		t.Errorf("ChargePointIDs() = %v", got)
 	}
 	cp := lookup(t, srv, "B")
 	if cp.ID() != "B" || cp.Version() != ocpp.V16 || cp.RemoteAddr() == "" {
@@ -520,8 +520,8 @@ func TestConcurrentStations(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	if boots.get() != stations || beats.get() != stations*5 || len(srv.ChargePoints()) != stations {
-		t.Errorf("boots=%d beats=%d connected=%d", boots.get(), beats.get(), len(srv.ChargePoints()))
+	if boots.get() != stations || beats.get() != stations*5 || len(srv.ChargePointIDs()) != stations {
+		t.Errorf("boots=%d beats=%d connected=%d", boots.get(), beats.get(), len(srv.ChargePointIDs()))
 	}
 	// The CSMS can address each one.
 	for i := 0; i < stations; i += 10 {

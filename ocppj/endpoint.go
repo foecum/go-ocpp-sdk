@@ -252,7 +252,7 @@ func (e *Endpoint) HandleFrame(data []byte) {
 		errors.As(err, &pe)
 		e.log.Warn("ocppj: invalid frame", "err", err)
 		if pe.ShouldReply() {
-			e.reply(&CallError{UniqueID: pe.ID, Code: pe.Code, Description: pe.Err.Error()})
+			e.reply(&CallErrorFrame{UniqueID: pe.ID, Code: pe.Code, Description: pe.Err.Error()})
 		}
 		return
 	}
@@ -277,7 +277,7 @@ func (e *Endpoint) HandleFrame(data []byte) {
 			}
 			return resp, nil
 		})
-	case *CallError:
+	case *CallErrorFrame:
 		e.complete(m.UniqueID, func(*pending) (ocpp.Response, error) {
 			return nil, &ocpp.CallError{Code: m.Code, Description: m.Description, Details: m.Details}
 		})
@@ -310,7 +310,7 @@ func (e *Endpoint) serve(c *Call) {
 		return
 	}
 	if e.handler == nil {
-		e.reply(&CallError{UniqueID: c.UniqueID, Code: ocpp.NotImplemented, Description: "no handler for " + c.Action})
+		e.reply(&CallErrorFrame{UniqueID: c.UniqueID, Code: ocpp.NotImplemented, Description: "no handler for " + c.Action})
 		return
 	}
 	resp, err := e.handler(e.baseCtx, req)
@@ -319,36 +319,36 @@ func (e *Endpoint) serve(c *Call) {
 		return
 	}
 	if resp == nil {
-		e.reply(&CallError{UniqueID: c.UniqueID, Code: ocpp.InternalError, Description: "handler returned no response"})
+		e.reply(&CallErrorFrame{UniqueID: c.UniqueID, Code: ocpp.InternalError, Description: "handler returned no response"})
 		return
 	}
 	if err := resp.Validate(); err != nil {
 		e.log.Error("ocppj: handler produced invalid response", "action", c.Action, "err", err)
-		e.reply(&CallError{UniqueID: c.UniqueID, Code: ocpp.InternalError, Description: "invalid response"})
+		e.reply(&CallErrorFrame{UniqueID: c.UniqueID, Code: ocpp.InternalError, Description: "invalid response"})
 		return
 	}
 	payload, err := marshalPayload(resp)
 	if err != nil {
-		e.reply(&CallError{UniqueID: c.UniqueID, Code: ocpp.InternalError, Description: "cannot encode response"})
+		e.reply(&CallErrorFrame{UniqueID: c.UniqueID, Code: ocpp.InternalError, Description: "cannot encode response"})
 		return
 	}
 	e.reply(&CallResult{UniqueID: c.UniqueID, Payload: payload})
 }
 
 // errorFrame maps an error to the CALLERROR to send.
-func (e *Endpoint) errorFrame(id string, err error) *CallError {
+func (e *Endpoint) errorFrame(id string, err error) *CallErrorFrame {
 	var de *DecodeError
 	var ce *ocpp.CallError
 	switch {
 	case errors.Is(err, ocpp.ErrUnknownAction):
-		return &CallError{UniqueID: id, Code: ocpp.NotImplemented, Description: err.Error()}
+		return &CallErrorFrame{UniqueID: id, Code: ocpp.NotImplemented, Description: err.Error()}
 	case errors.As(err, &de):
-		return &CallError{UniqueID: id, Code: de.Code, Description: truncate(de.Err.Error())}
+		return &CallErrorFrame{UniqueID: id, Code: de.Code, Description: truncate(de.Err.Error())}
 	case errors.As(err, &ce):
-		return &CallError{UniqueID: id, Code: ce.Code, Description: ce.Description, Details: ce.Details}
+		return &CallErrorFrame{UniqueID: id, Code: ce.Code, Description: ce.Description, Details: ce.Details}
 	}
 	e.log.Error("ocppj: handler failed", "err", err)
-	return &CallError{UniqueID: id, Code: ocpp.InternalError}
+	return &CallErrorFrame{UniqueID: id, Code: ocpp.InternalError}
 }
 
 func truncate(s string) string {
@@ -360,7 +360,7 @@ func truncate(s string) string {
 
 // reply sends a CALLRESULT or CALLERROR; failures are logged.
 func (e *Endpoint) reply(m Message) {
-	if ce, ok := m.(*CallError); ok {
+	if ce, ok := m.(*CallErrorFrame); ok {
 		ce.Description = truncate(ce.Description)
 	}
 	frame, err := Marshal(m)

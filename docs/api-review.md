@@ -26,20 +26,21 @@ comments and conventions in `AGENTS.md`. The packages reviewed are `ocpp`,
 - The spec's own naming is kept where it differs (`...Confirmation` in 1.6,
   `...Response` in 2.0.1; `FormationViolation` and `FormatViolation`).
 
-## Proposed changes, for the owner to decide
+## Proposed changes and decisions
 
-Each of these changes the agreed public API, so none is applied. All are cheap
-now and costly after v1.0.0. "Recommend" is my view.
+Each of these changes the agreed public API. The owner approved the
+recommendations on 2026-11-25: items 1 to 3 are applied, 4 to 7 are kept or
+deferred as recommended.
 
-1. **Two types called `CallError`** (`ocpp.CallError`, the error a call returns, and
+1. **(Applied: renamed `ocppj.CallErrorFrame`.) Two types called `CallError`** (`ocpp.CallError`, the error a call returns, and
    `ocppj.CallError`, the CALLERROR frame). Easy to confuse in a signature or an
    import. Option: rename the frame type to `ocppj.CallErrorFrame`, or leave and
    document. Recommend: rename; `ocppj` is the low-level package, so few users
    are affected.
-2. **`CSMS.ChargePoints()` returns identities, not charge points**, while
+2. **(Applied: renamed `ChargePointIDs()`.) `CSMS.ChargePoints()` returned identities, not charge points**, while
    `CSMS.ChargePoint(id)` returns one. The names suggest the same kind of value.
    Option: rename to `ChargePointIDs()`. Recommend: rename.
-3. **`Close()` and I/O without a context.** `AGENTS.md` says functions that do I/O
+3. **(Applied: exception recorded in `AGENTS.md`.) `Close()` and I/O without a context.** `AGENTS.md` says functions that do I/O
    take a `context.Context`. `ChargePoint.Close()` (station and CSMS side) closes a
    connection gracefully without one. `CSMS.Shutdown(ctx)` does take one.
    Option: leave (a close handshake has its own short timeout) and record the

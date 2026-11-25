@@ -54,7 +54,7 @@ func Example() {
 	}
 
 	cp, ok := srv.ChargePoint("CS001")
-	fmt.Println(ok, srv.ChargePoints())
+	fmt.Println(ok, srv.ChargePointIDs())
 
 	// The station has no handler for Reset, so it answers NotSupported.
 	_, err = cp.Reset(ctx, core.ResetRequest{Type: types.ResetTypeSoft})

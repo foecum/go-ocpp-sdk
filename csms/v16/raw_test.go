@@ -26,7 +26,7 @@ func rawStation(t *testing.T, url, id string) *websocket.Conn {
 }
 
 // exchange sends one frame and returns the CALLERROR it provokes.
-func exchange(t *testing.T, c *websocket.Conn, frame string) *ocppj.CallError {
+func exchange(t *testing.T, c *websocket.Conn, frame string) *ocppj.CallErrorFrame {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -41,7 +41,7 @@ func exchange(t *testing.T, c *websocket.Conn, frame string) *ocppj.CallError {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ce, ok := m.(*ocppj.CallError)
+	ce, ok := m.(*ocppj.CallErrorFrame)
 	if !ok {
 		t.Fatalf("expected a CALLERROR for %s, got %s", frame, data)
 	}

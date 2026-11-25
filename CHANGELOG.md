@@ -16,6 +16,7 @@ pre-1.0: the API may still change.
 - `docs/api-review.md`: a review of the public API ahead of v1.0.0.
 
 ### Changed
+- **Breaking (pre-1.0):** `ocppj.CallError` is now `ocppj.CallErrorFrame`, and `csms.CSMS.ChargePoints()` is now `ChargePointIDs()` (`csms/v16` and `csms/v201`).
 - The `ChargePoint` types of `csms/v16`, `csms/v201`, `chargepoint/v16` and
   `chargepoint/v201` forward their methods explicitly; method sets are the same as
   in v0.1.0.

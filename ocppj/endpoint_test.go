@@ -348,7 +348,7 @@ func TestServeIncomingCalls(t *testing.T) {
 			}
 			continue
 		}
-		ce, ok := m.(*CallError)
+		ce, ok := m.(*CallErrorFrame)
 		if !ok || ce.Code != tt.wantCode || (tt.wantDesc != "" && ce.Description != tt.wantDesc) {
 			t.Errorf("%s: got %#v", tt.name, m)
 		}
@@ -404,7 +404,7 @@ func TestInvalidIncomingFrames(t *testing.T) {
 			if len(sent) != 0 {
 				t.Errorf("%s: unexpected reply %#v", tt.name, sent)
 			}
-		} else if len(sent) != 1 || sent[0].ID() != tt.wantID || sent[0].(*CallError).Code != tt.wantCode {
+		} else if len(sent) != 1 || sent[0].ID() != tt.wantID || sent[0].(*CallErrorFrame).Code != tt.wantCode {
 			t.Errorf("%s: got %#v", tt.name, sent)
 		}
 		mu.Unlock()
@@ -419,7 +419,7 @@ func TestReplyFailuresAreLogged(t *testing.T) {
 	r.e.Close()
 	r.expectNone(t)
 
-	// Unmarshalable reply: a handler CallError without a code.
+	// Unmarshalable reply: a handler CallErrorFrame without a code.
 	r = newRig(t, func(c *Config) {
 		c.Handler = func(context.Context, ocpp.Request) (ocpp.Response, error) {
 			return nil, &ocpp.CallError{Description: "no code"}

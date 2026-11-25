@@ -152,5 +152,5 @@ func (s *CSMS) Shutdown(ctx context.Context) error { return s.srv.Shutdown(ctx) 
 // ChargePoint returns the connected charging station with the given identity.
 func (s *CSMS) ChargePoint(id string) (*ChargePoint, bool) { return s.srv.Lookup(id) }
 
-// ChargePoints returns the identities of all connected charging stations, sorted.
-func (s *CSMS) ChargePoints() []string { return s.srv.IDs() }
+// ChargePointIDs returns the identities of all connected charging stations, sorted.
+func (s *CSMS) ChargePointIDs() []string { return s.srv.IDs() }

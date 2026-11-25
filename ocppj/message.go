@@ -33,7 +33,7 @@ const (
 	CallErrorType MessageType = 4
 )
 
-// Message is one OCPP-J frame: a Call, CallResult or CallError.
+// Message is one OCPP-J frame: a Call, CallResult or CallErrorFrame.
 type Message interface {
 	// Type returns the message type number.
 	Type() MessageType
@@ -54,8 +54,8 @@ type CallResult struct {
 	Payload  json.RawMessage
 }
 
-// CallError is an error frame: [4, id, code, description, details].
-type CallError struct {
+// CallErrorFrame is an error frame: [4, id, code, description, details].
+type CallErrorFrame struct {
 	UniqueID    string
 	Code        ocpp.ErrorCode
 	Description string
@@ -69,7 +69,7 @@ func (Call) Type() MessageType { return CallType }
 func (CallResult) Type() MessageType { return CallResultType }
 
 // Type implements Message.
-func (CallError) Type() MessageType { return CallErrorType }
+func (CallErrorFrame) Type() MessageType { return CallErrorType }
 
 // ID implements Message.
 func (m Call) ID() string { return m.UniqueID }
@@ -78,7 +78,7 @@ func (m Call) ID() string { return m.UniqueID }
 func (m CallResult) ID() string { return m.UniqueID }
 
 // ID implements Message.
-func (m CallError) ID() string { return m.UniqueID }
+func (m CallErrorFrame) ID() string { return m.UniqueID }
 
 // ParseError reports a frame that could not be parsed. It carries what is
 // needed to answer the sender with a CALLERROR.
@@ -177,7 +177,7 @@ func parseCallError(id string, elems []json.RawMessage, fail func(error) (Messag
 	if err != nil {
 		return fail(err)
 	}
-	return &CallError{UniqueID: id, Code: ocpp.ErrorCode(code), Description: desc, Details: details}, nil
+	return &CallErrorFrame{UniqueID: id, Code: ocpp.ErrorCode(code), Description: desc, Details: details}, nil
 }
 
 func unreadableCode(v ocpp.Version) ocpp.ErrorCode {
@@ -220,7 +220,7 @@ func Marshal(m Message) ([]byte, error) {
 			return nil, err
 		}
 		frame = []any{CallResultType, m.UniqueID, payloadOrEmpty(m.Payload)}
-	case *CallError:
+	case *CallErrorFrame:
 		if err := checkID(m.UniqueID); err != nil {
 			return nil, err
 		}

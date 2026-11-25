@@ -407,7 +407,7 @@ log.Fatal(http.ListenAndServe(":8080", srv)) // the CSMS is an http.Handler
 // or srv.ListenAndServe(":8080") / srv.Serve(listener), then srv.Shutdown(ctx)
 
 cp, ok := srv.ChargePoint("CS001") // the live connection, if any
-ids := srv.ChargePoints()          // connected identities, sorted</code></pre></div>
+ids := srv.ChargePointIDs()          // connected identities, sorted</code></pre></div>
       <ul>
         <li>Charge points connect to <code>ws://host/ocpp/&lt;identity&gt;</code>: the identity is the last path segment of the URL.</li>
         <li>Typed calls to the charge point, one per Central System message: <code>ChangeAvailability</code>, <code>ChangeConfiguration</code>, <code>ClearCache</code>, <code>DataTransfer</code>, <code>GetConfiguration</code>, <code>RemoteStartTransaction</code>, <code>RemoteStopTransaction</code>, <code>Reset</code>, <code>UnlockConnector</code> (Core), <code>GetDiagnostics</code>, <code>UpdateFirmware</code>, <code>GetLocalListVersion</code>, <code>SendLocalList</code>, <code>ReserveNow</code>, <code>CancelReservation</code>, <code>SetChargingProfile</code>, <code>ClearChargingProfile</code>, <code>GetCompositeSchedule</code> and <code>TriggerMessage</code>. Each takes its request type by value and returns a pointer to the confirmation.</li>

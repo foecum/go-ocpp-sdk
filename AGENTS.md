@@ -85,7 +85,7 @@ e.g. `v16/core/boot_notification.go` holds `BootNotificationRequest`,
 
 ## 4. Conventions
 
-- Every function that does I/O takes `context.Context` as its first argument.
+- Every function that does I/O takes `context.Context` as its first argument. Exception: `Close()` of `ws` connections and of the high-level `ChargePoint` types closes gracefully with the close handshake's own short timeout and takes no context (decided 2026-11-25); `CSMS.Shutdown(ctx)` takes one.
 - Library code never panics on bad input; return errors and wrap with `%w`.
 - Exported error values/types for the cases callers need to branch on
   (timeout, not connected, CALLERROR received, validation failed).
@@ -271,7 +271,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Fuzz tests for `ocppj` parsing (`go test -fuzz`)
 - [x] Benchmarks for framing and a CSMS with many simulated charge points
 - [x] Load test example: 1,000 simulated charge points against one CSMS
-- [ ] Review public API for consistency; write `CHANGELOG.md`  (review: docs/api-review.md, awaiting decisions)
+- [x] Review public API for consistency; write `CHANGELOG.md`  (review: docs/api-review.md)
 - [ ] Tag `v1.0.0` (ask owner first)
 
 ### Phase 10 — OCPP 2.1 (later, ask owner)
@@ -320,6 +320,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Fuzzing: six targets (`ocppj` FuzzParse / FuzzRegistryDecode / FuzzEndpointHandleFrame, `ocpp` FuzzDateTime, `v16` and `v201` FuzzDecode over every message) check for panics and for accept-then-roundtrip consistency. Their seeds run as ordinary tests; `.github/workflows/fuzz.yml` fuzzes each for 60 s weekly and on demand (approved by the owner). A failing input is uploaded as an artifact and must be committed under `testdata/fuzz` with its fix.
 - 2026-11-25 — Benchmarks (`ocppj`, `v16`, `v201`, `csms/v16`, `csms/v201`) have no CI thresholds; indicative results are kept in `docs/benchmarks.md`, labelled with the machine (approved by the owner).
 - 2026-11-25 — Load test (`examples/loadtest`): in-process CSMS plus N simulated stations over loopback WebSockets, for 1.6 and 2.0.1; reports operations/s and latency percentiles. A 20-station smoke test runs in the suite (skipped with `-short`); the 1,000-station run is manual.
+- 2026-11-25 — API review before v1.0.0 (owner approved the recommendations in `docs/api-review.md`): `ocppj.CallError` renamed `ocppj.CallErrorFrame` (so it no longer clashes with `ocpp.CallError`); `CSMS.ChargePoints()` renamed `CSMS.ChargePointIDs()` in `csms/v16` and `csms/v201`; the `Close()` exception to the context rule is recorded in section 4; everything else in the review is kept as is. A `ForEach` helper and the transaction-message retry helper stay additive post-1.0 candidates.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items

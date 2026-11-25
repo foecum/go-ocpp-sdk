@@ -2,7 +2,7 @@
 // independent of OCPP version and of the WebSocket library.
 //
 // Parse and Marshal convert between frames and the Call, CallResult and
-// CallError messages. A Registry maps actions to request/response types, and an
+// CallErrorFrame messages. A Registry maps actions to request/response types, and an
 // Endpoint sends CALLs one at a time, matches responses by message ID, applies
 // timeouts and dispatches incoming CALLs to a handler:
 //

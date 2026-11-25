@@ -331,7 +331,7 @@ func rawCSMS(t *testing.T) (url string, conns <-chan *websocket.Conn) {
 	return "ws" + strings.TrimPrefix(ts.URL, "http") + "/ocpp", ch
 }
 
-func exchange(t *testing.T, c *websocket.Conn, frame string) *ocppj.CallError {
+func exchange(t *testing.T, c *websocket.Conn, frame string) *ocppj.CallErrorFrame {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -346,7 +346,7 @@ func exchange(t *testing.T, c *websocket.Conn, frame string) *ocppj.CallError {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ce, ok := m.(*ocppj.CallError)
+	ce, ok := m.(*ocppj.CallErrorFrame)
 	if !ok {
 		t.Fatalf("expected a CALLERROR for %s, got %s", frame, data)
 	}

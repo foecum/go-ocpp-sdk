@@ -22,7 +22,7 @@ func TestParseValid(t *testing.T) {
 		{"call whitespace", " [ 2 , \"1\" , \"Heartbeat\" , {} ] ", &Call{UniqueID: "1", Action: "Heartbeat", Payload: []byte(`{}`)}},
 		{"call result", `[3,"1",{"status":"Accepted"}]`, &CallResult{UniqueID: "1", Payload: []byte(`{"status":"Accepted"}`)}},
 		{"call error", `[4,"1","NotSupported","nope",{}]`,
-			&CallError{UniqueID: "1", Code: ocpp.NotSupported, Description: "nope", Details: []byte(`{}`)}},
+			&CallErrorFrame{UniqueID: "1", Code: ocpp.NotSupported, Description: "nope", Details: []byte(`{}`)}},
 		{"max id", `[3,"` + strings.Repeat("a", 36) + `",{}]`, &CallResult{UniqueID: strings.Repeat("a", 36), Payload: []byte(`{}`)}},
 	}
 	for _, tt := range tests {
@@ -44,8 +44,8 @@ func TestParseValid(t *testing.T) {
 				if string(got.(*CallResult).Payload) != string(w.Payload) {
 					t.Errorf("%s: got %#v", tt.name, got)
 				}
-			case *CallError:
-				g := got.(*CallError)
+			case *CallErrorFrame:
+				g := got.(*CallErrorFrame)
 				if g.Code != w.Code || g.Description != w.Description || string(g.Details) != string(w.Details) {
 					t.Errorf("%s: got %#v", tt.name, g)
 				}
@@ -118,8 +118,8 @@ func TestMarshal(t *testing.T) {
 		{"call empty payload", &Call{UniqueID: "1", Action: "Heartbeat"}, `[2,"1","Heartbeat",{}]`},
 		{"result", &CallResult{UniqueID: "1", Payload: []byte(`{"x":"y"}`)}, `[3,"1",{"x":"y"}]`},
 		{"result empty", &CallResult{UniqueID: "1"}, `[3,"1",{}]`},
-		{"error", &CallError{UniqueID: "1", Code: ocpp.NotImplemented, Description: "d"}, `[4,"1","NotImplemented","d",{}]`},
-		{"error details", &CallError{UniqueID: "1", Code: ocpp.GenericError, Details: []byte(`{"k":1}`)}, `[4,"1","GenericError","",{"k":1}]`},
+		{"error", &CallErrorFrame{UniqueID: "1", Code: ocpp.NotImplemented, Description: "d"}, `[4,"1","NotImplemented","d",{}]`},
+		{"error details", &CallErrorFrame{UniqueID: "1", Code: ocpp.GenericError, Details: []byte(`{"k":1}`)}, `[4,"1","GenericError","",{"k":1}]`},
 	}
 	for _, tt := range tests {
 		got, err := Marshal(tt.msg)
@@ -141,9 +141,9 @@ func TestMarshalErrors(t *testing.T) {
 		"call long id":   &Call{UniqueID: long, Action: "A"},
 		"call no action": &Call{UniqueID: "1"},
 		"result no id":   &CallResult{},
-		"error no id":    &CallError{Code: ocpp.GenericError},
-		"error no code":  &CallError{UniqueID: "1"},
-		"error long desc": &CallError{UniqueID: "1", Code: ocpp.GenericError,
+		"error no id":    &CallErrorFrame{Code: ocpp.GenericError},
+		"error no code":  &CallErrorFrame{UniqueID: "1"},
+		"error long desc": &CallErrorFrame{UniqueID: "1", Code: ocpp.GenericError,
 			Description: strings.Repeat("é", 256)},
 		"bad payload": &Call{UniqueID: "1", Action: "A", Payload: []byte(`{bad`)},
 		"value type":  Call{UniqueID: "1", Action: "A"},
@@ -157,7 +157,7 @@ func TestMarshalErrors(t *testing.T) {
 		t.Errorf("want ErrValidation, got %v", err)
 	}
 	// Exactly 255 multi-byte characters is allowed.
-	if _, err := Marshal(&CallError{UniqueID: "1", Code: ocpp.GenericError, Description: strings.Repeat("é", 255)}); err != nil {
+	if _, err := Marshal(&CallErrorFrame{UniqueID: "1", Code: ocpp.GenericError, Description: strings.Repeat("é", 255)}); err != nil {
 		t.Errorf("255 runes: %v", err)
 	}
 }
