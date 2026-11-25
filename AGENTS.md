@@ -269,7 +269,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 
 ### Phase 9 — Hardening
 - [x] Fuzz tests for `ocppj` parsing (`go test -fuzz`)
-- [ ] Benchmarks for framing and a CSMS with many simulated charge points
+- [x] Benchmarks for framing and a CSMS with many simulated charge points
 - [ ] Load test example: 1,000 simulated charge points against one CSMS
 - [ ] Review public API for consistency; write `CHANGELOG.md`
 - [ ] Tag `v1.0.0` (ask owner first)
@@ -318,6 +318,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — 2.0.1 examples (`examples/v201/csms`, `examples/v201/chargingstation`) mirror the 1.6 ones: plain `ws://` with optional Basic auth, in-memory state only (the station keeps a tiny variable map, not a device model), only the public API; `examples/v201/smoke_test.go` builds both and runs a remote-started session end to end (skipped with `-short`). Neither example has `Example` functions; the smoke test is their test.
 - 2026-11-25 — `v0.2.0` tagged locally with the owner's OK (OCPP 2.0.1 messages, high-level APIs and examples). Not pushed: the owner pushes `main` and the tag, after CI and Pages have run. The tag also carries the `ws.Server` shutdown fix, so it supersedes the planned v0.1.1.
 - 2026-11-25 — Fuzzing: six targets (`ocppj` FuzzParse / FuzzRegistryDecode / FuzzEndpointHandleFrame, `ocpp` FuzzDateTime, `v16` and `v201` FuzzDecode over every message) check for panics and for accept-then-roundtrip consistency. Their seeds run as ordinary tests; `.github/workflows/fuzz.yml` fuzzes each for 60 s weekly and on demand (approved by the owner). A failing input is uploaded as an artifact and must be committed under `testdata/fuzz` with its fix.
+- 2026-11-25 — Benchmarks (`ocppj`, `v16`, `v201`, `csms/v16`, `csms/v201`) have no CI thresholds; indicative results are kept in `docs/benchmarks.md`, labelled with the machine (approved by the owner).
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
