@@ -109,9 +109,9 @@ type Config struct {
 // state of the connection. The methods that call the CSMS, one per message the
 // station sends, are in calls_gen.go.
 type ChargePoint struct {
-	*cpcore.Station
-	cfg Config
-	log *slog.Logger
+	station *cpcore.Station
+	cfg     Config
+	log     *slog.Logger
 }
 
 // New validates cfg and creates a ChargePoint. It does not connect: call Run.
@@ -125,7 +125,7 @@ func New(cfg Config) (*ChargePoint, error) {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	c := &ChargePoint{cfg: cfg, log: log}
-	c.Station, err = cpcore.New(cpcore.Config{
+	c.station, err = cpcore.New(cpcore.Config{
 		Version:      ocpp.V201,
 		Registry:     reg,
 		Dispatch:     c.dispatch,
@@ -148,6 +148,21 @@ func New(cfg Config) (*ChargePoint, error) {
 	return c, nil
 }
 
+// Run connects to the Central System and keeps the connection up, reconnecting
+// with back-off after any failure, until ctx ends or Close is called. It
+// returns ocpp.ErrClosed after Close, or ctx's error. Call it once, usually in
+// its own goroutine.
+func (c *ChargePoint) Run(ctx context.Context) error { return c.station.Run(ctx) }
+
+// Close disconnects gracefully, stops reconnecting and waits for Run to return.
+func (c *ChargePoint) Close() error { return c.station.Close() }
+
+// Connected reports whether the charge point is connected right now.
+func (c *ChargePoint) Connected() bool { return c.station.Connected() }
+
+// WaitConnected blocks until the charge point is connected or ctx ends.
+func (c *ChargePoint) WaitConnected(ctx context.Context) error { return c.station.WaitConnected(ctx) }
+
 func call[Resp any](ctx context.Context, c *ChargePoint, req ocpp.Request) (*Resp, error) {
-	return cpcore.Call[Resp](ctx, c.Station, req)
+	return cpcore.Call[Resp](ctx, c.station, req)
 }

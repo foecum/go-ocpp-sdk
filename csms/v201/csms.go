@@ -113,7 +113,7 @@ func New(cfg Config) (*CSMS, error) {
 	s.srv, err = csmscore.New(csmscore.Config[ChargePoint]{
 		Version:   ocpp.V201,
 		Registry:  reg,
-		NewHandle: func(sess *csmscore.Session) *ChargePoint { return &ChargePoint{Session: sess} },
+		NewHandle: func(sess *csmscore.Session) *ChargePoint { return &ChargePoint{session: sess} },
 		Dispatch: func(ctx context.Context, cp *ChargePoint, req ocpp.Request) (ocpp.Response, error) {
 			return s.dispatch(ctx, cp, req)
 		},
