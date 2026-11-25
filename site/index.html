@@ -248,7 +248,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages and the 11 of the security extension, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is in progress: all 64 messages and both high-level APIs exist, see <a href="#v201">OCPP 2.0.1</a>; examples are next.</div>
+      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages and the 11 of the security extension, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is in progress: all 64 messages and both high-level APIs exist, see <a href="#v201">OCPP 2.0.1</a>, with runnable examples. The release is still to come.</div>
     </section>
 
     <section id="install">
@@ -517,6 +517,20 @@ level=INFO msg="stop transaction" id=CS001 transaction=1 meterStop=1000 reason=L
         <li>The test suite builds both programs and runs them against each other, so they cannot drift from the library.</li>
         <li>Every package also has tested <code>Example</code> functions on <a href="https://pkg.go.dev/github.com/foecum/go-ocpp-sdk">pkg.go.dev</a>.</li>
       </ul>
+      <h3>OCPP 2.0.1</h3>
+      <p>The same two programs exist for 2.0.1 in <code>examples/v201</code>:</p>
+      <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go run ./examples/v201/csms -addr :8080 -remote-start
+go run ./examples/v201/chargingstation -id CS001</code></pre></div>
+      <p>The station boots, reports its status, authorizes an idToken and runs sessions as <code>TransactionEvent</code>s (Started, Updated with meter values, Ended). After the boot, the Central System reads and sets the station's <code>HeartbeatInterval</code> with <code>GetVariables</code> and <code>SetVariables</code>; with <code>-remote-start</code> it also sends <code>RequestStartTransaction</code> and, a second later, <code>RequestStopTransaction</code>. The Central System's log (trimmed):</p>
+      <div class="code"><div class="code-head"><span>output</span><button class="copy">Copy</button></div><pre><code class="lang-sh">level=INFO msg="boot notification" id=CS001 reason=PowerUp vendor=Example model=Simulator firmware=1.0.0
+level=INFO msg=variable id=CS001 name=HeartbeatInterval value=1 status=Accepted
+level=INFO msg="variable set" id=CS001 name=HeartbeatInterval status=Accepted
+level=INFO msg="request start transaction" id=CS001 status=Accepted
+level=INFO msg="transaction event" id=CS001 event=Started transaction=CS001-1 seq=0 trigger=RemoteStart state=Charging
+level=INFO msg="transaction event" id=CS001 event=Updated transaction=CS001-1 seq=1 trigger=MeterValuePeriodic state=Charging
+level=INFO msg="request stop transaction" id=CS001 transaction=CS001-1 status=Accepted
+level=INFO msg="transaction event" id=CS001 event=Ended transaction=CS001-1 seq=4 trigger=RemoteStop state=Idle</code></pre></div>
+      <p>The flags are the same as for 1.6, plus <code>-remote-start</code> on the Central System. The test suite builds and runs this pair too.</p>
     </section>
 
     <section id="messages">
@@ -602,7 +616,7 @@ fmt.Println(bad.Validate()) // ocpp: invalid field "connectorId": must be at lea
 
     <section id="v201">
       <h2>OCPP 2.0.1</h2>
-      <div class="note warn"><strong>In progress</strong>The messages and the high-level APIs are available. Runnable examples, a device-model helper and the integration with the README are still to come, and the API may change before 1.0.</div>
+      <div class="note warn"><strong>In progress</strong>The messages and the high-level APIs are available. Runnable examples are in <a href="#examples">Runnable examples</a>. A device-model helper (the standardized component and variable names) is still to come, and the API may change before 1.0.</div>
       <p>All 64 messages of OCPP 2.0.1 are implemented as typed <code>...Request</code> and <code>...Response</code> structs, one package per functional block of the specification, plus <code>v201/types</code> for the shared types and enumerations. They are generated from the official JSON schemas, validated on send and receive, and tested against those schemas. <code>v201.NewRegistry()</code> registers them all.</p>
       <div class="tablewrap"><table>
         <tr><th>Block</th><th>Name</th><th>Package</th></tr>
@@ -974,7 +988,7 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>5</td><td>Remaining 1.6 profiles: firmware, local auth list, reservation, smart charging, remote trigger</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>6</td><td>Examples, docs, v0.1.0</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>7</td><td>OCPP 1.6 security extension</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>8</td><td>OCPP 2.0.1: messages and high-level APIs done; examples next</td><td><span class="badge b-next">In progress</span></td></tr>
+        <tr><td>8</td><td>OCPP 2.0.1: messages, high-level APIs and examples done; release to come</td><td><span class="badge b-next">In progress</span></td></tr>
         <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
       </table></div>
       <h3>Supported messages</h3>

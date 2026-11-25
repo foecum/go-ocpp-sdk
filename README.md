@@ -10,7 +10,7 @@ central management system.
 security extension, both roles, WebSocket transport with security profiles 1 to 3.
 The API may still change before 1.0.
 OCPP 2.0.1 is in progress: all 64 messages and the high-level APIs exist (see
-[OCPP 2.0.1](#ocpp-201)); examples are next. See the [roadmap](AGENTS.md#7-roadmap).
+[OCPP 2.0.1](#ocpp-201)), with runnable examples; the release is still to come. See the [roadmap](AGENTS.md#7-roadmap).
 
 - Both roles: charging station (`chargepoint`) and Central System / CSMS (`csms`).
 - OCPP-J (JSON over WebSocket) only; no SOAP.
@@ -306,6 +306,17 @@ go run ./examples/v16/chargepoint -id CS001
 The station boots, sends heartbeats and runs charging sessions; the Central
 System logs everything and calls the station back. Try `-password`, `-tags` and
 `-sessions`. The test suite runs both programs against each other.
+
+The same pair exists for OCPP 2.0.1 in [`examples/v201`](examples/v201):
+
+```bash
+go run ./examples/v201/csms -addr :8080 -remote-start
+go run ./examples/v201/chargingstation -id CS001
+```
+
+The station runs sessions as `TransactionEvent`s (Started, Updated, Ended); the
+Central System reads and sets a variable with `GetVariables` / `SetVariables`
+and, with `-remote-start`, starts and stops a session remotely.
 
 ## Packages
 
