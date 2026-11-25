@@ -157,11 +157,11 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] `ocppj`: parse/serialize CALL `[2, id, action, payload]`,
       CALLRESULT `[3, id, payload]`, CALLERROR `[4, id, code, description, details]`
 - [x] Unique message IDs (max 36 chars)
-- [ ] Pending-request tracker: correlate responses by ID, per-request timeout,
+- [x] Pending-request tracker: correlate responses by ID, per-request timeout,
       one outstanding CALL per direction per connection (spec rule), queue the rest
-- [ ] Feature registry: map action name → request/response types, per version
+- [x] Feature registry: map action name → request/response types, per version
 - [x] CALLERROR code sets for 1.6 and 2.0.1 (note spelling differences)
-- [ ] Table-driven tests: valid frames, malformed JSON, wrong element types,
+- [x] Table-driven tests: valid frames, malformed JSON, wrong element types,
       unknown action, unknown message type, response with unknown ID, timeout
 
 ### Phase 2 — Transport (`ws`)
@@ -277,6 +277,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — `ErrorCode` and the per-version code sets live in the root `ocpp` package (not `ocppj`) so `ocpp.CallError` can use them without an import cycle. OCPP 2.1 uses the 2.0.1 code set (checked against 2.1 OCPP-J table 8).
 - 2026-11-25 — Validation is hand-written `Validate()` methods on requests/responses, no validator dependency.
 - 2026-11-25 — Framing rules: unreadable message ID is answered with `-1` (2.0.1 OCPP-J 4.2.3); unknown message type gets `MessageTypeNotSupported` in 2.0.1/2.1 and is ignored in 1.6; a `null` payload is accepted and treated as `{}`.
+- 2026-11-25 — `ocppj.Endpoint` is transport-agnostic (the transport passes a `Send` func and feeds `HandleFrame`). Defaults: 30s response timeout counted from send, 1000-call bounded queue. A caller whose context ends frees the outstanding slot (treated like a timeout) so the queue keeps moving; late responses are dropped. Incoming CALLs run in their own goroutine so handlers may call back into the peer.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
