@@ -66,6 +66,10 @@ type Server struct {
 	baseCancel context.CancelFunc
 	wg         sync.WaitGroup
 
+	// afterAccept, if set, runs after a handshake completes and before the
+	// connection is registered. Tests use it to start a shutdown in that window.
+	afterAccept func()
+
 	mu      sync.Mutex
 	conns   map[string]*Conn
 	closing bool
@@ -176,6 +180,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = ws.Close(websocket.StatusProtocolError, "no supported OCPP subprotocol")
 		return
 	}
+	if s.afterAccept != nil {
+		s.afterAccept()
+	}
 	c := newConn(s.baseCtx, ws, id, ocpp.Version(ws.Subprotocol()), r.RemoteAddr)
 	s.register(c)
 	if s.cfg.OnConnect != nil {
@@ -203,11 +210,19 @@ func rejectHandshake(w http.ResponseWriter, err error) {
 // register records c, replacing (and closing) any earlier connection with the
 // same identity: after a network drop a charge point usually reconnects before
 // the server notices the old connection is dead.
+//
+// A connection that completes its handshake while the server is shutting down
+// may have missed Shutdown's snapshot of the open connections, so it is closed
+// here.
 func (s *Server) register(c *Conn) {
 	s.mu.Lock()
+	closing := s.closing
 	old := s.conns[c.id]
 	s.conns[c.id] = c
 	s.mu.Unlock()
+	if closing {
+		go func() { _ = c.closeWith(nil, websocket.StatusGoingAway, "server shutting down") }()
+	}
 	if old != nil {
 		go func() {
 			_ = old.closeWith(ErrReplaced, websocket.StatusPolicyViolation, "replaced by a newer connection")
