@@ -103,6 +103,15 @@ e.g. `v16/core/boot_notification.go` holds `BootNotificationRequest`,
 - Every exported identifier has a doc comment. Each package has a `doc.go` with a
   short usage example.
 - Formatting and linting: `gofmt`, `go vet`, and `staticcheck` (if installed) are clean.
+- **Test coverage (mandatory):** unit test statement coverage MUST NEVER fall below
+  **95%**, measured per package (not just in total), and every critical path MUST be
+  covered. Critical paths are: frame parsing and serialization, every error and
+  CALLERROR path, validation of required fields/lengths/enums on send and receive,
+  timeouts, cancellation, disconnects, reconnects, queueing and ordering,
+  authentication and TLS handling, and concurrent use. A change that drops any
+  package below 95% is not done; add tests, never lower the threshold or exclude
+  code to pass it. Only `examples/` and packages with no statements (doc-only) are
+  exempt. `scripts/coverage.sh` enforces this and CI runs it.
 
 ## 5. Commands
 
@@ -112,6 +121,7 @@ Run after every change, and fix failures before moving on:
 go build ./...
 go vet ./...
 go test -race ./...
+scripts/coverage.sh        # fails if any package is below 95% coverage
 ```
 
 Optional when available: `staticcheck ./...`, `golangci-lint run`.
@@ -130,7 +140,8 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 7. Stop and ask the owner when: the spec is unclear, a new dependency is needed,
    the public API of `chargepoint`/`csms` needs to change after it was agreed, or
    a test cannot be made to pass without changing agreed behaviour.
-8. Never delete or weaken a test to make it pass.
+8. Never delete or weaken a test to make it pass, and never lower the 95% coverage
+   threshold (section 4).
 
 ## 7. Roadmap
 
@@ -262,6 +273,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Licence: MIT — chosen by the owner.
 - 2026-11-25 — `go` directive follows the installed toolchain (1.27.2).
 - 2026-11-25 — CI runs staticcheck via `go run honnef.co/go/tools/cmd/staticcheck@latest`, so no module dependency is added.
+- 2026-11-25 — Coverage floor of 95% per package plus full critical-path coverage, enforced by `scripts/coverage.sh` and CI — set by the owner.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items

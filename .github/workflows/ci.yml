@@ -21,6 +21,8 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race ./...
+      - name: Coverage (95% per package)
+        run: scripts/coverage.sh
 
   staticcheck:
     runs-on: ubuntu-latest
