@@ -19,6 +19,22 @@
 // A charge point that connects again under the same identity replaces its older
 // connection. Shutdown closes every connection gracefully (close code 1001).
 //
+// # Client (charging station)
+//
+// A Client connects to the CSMS endpoint URL, appends the charge point identity,
+// offers its OCPP versions and keeps the connection up. After any failure it
+// reconnects with the back-off described in OCPP-J §5.4 (see Reconnect):
+//
+//	cl, _ := ws.NewClient(ws.ClientConfig{
+//		URL:      "wss://csms.example.com/ocpp",
+//		ID:       "CS001",
+//		Versions: []ocpp.Version{ocpp.V201, ocpp.V16},
+//		Password: "…",
+//		OnFrame:  func(c *ws.Conn, frame []byte) { /* feed an ocppj.Endpoint */ },
+//	})
+//	go cl.Run(ctx) // returns when ctx ends or cl.Close() is called
+//	// cl.Send is an ocppj.Config.Send
+//
 // # Security profiles
 //
 //	Profile 1: BasicAuthenticator over ws://

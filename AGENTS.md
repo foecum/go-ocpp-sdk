@@ -174,13 +174,13 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Server: charge point ID from the last URL path segment; connection
       registry; connect/disconnect callbacks
 - [x] Subprotocol negotiation (`ocpp1.6`, `ocpp2.0.1`); reject if none match
-- [ ] Client: connect, auto-reconnect with exponential backoff + jitter
-- [ ] Ping/pong keep-alive with configurable interval
+- [x] Client: connect, auto-reconnect with exponential backoff + jitter
+- [x] Ping/pong keep-alive with configurable interval
 - [x] Security profile 1: HTTP Basic Auth (charge point ID as username)
 - [x] Security profile 2: TLS + Basic Auth
 - [x] Security profile 3: TLS with client certificates (mTLS)
-- [ ] Graceful shutdown for server and client
-- [ ] Tests: handshake, subprotocol mismatch, auth failure, reconnect,
+- [x] Graceful shutdown for server and client
+- [x] Tests: handshake, subprotocol mismatch, auth failure, reconnect,
       concurrent connections
 
 ### Phase 3 — OCPP 1.6 types and Core profile
@@ -285,6 +285,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Documentation is a self-contained static site in `site/`, deployed to GitHub Pages by `.github/workflows/pages.yml` (only `site/` is published, never `docs/spec/`). Updating it is part of every change that affects users (section 10) — set by the owner.
 - 2026-11-25 — WebSocket library: `github.com/coder/websocket` (v1.8.15). Reasons: actively maintained (gorilla's last release was June 2024), context-aware reads/writes/pings/dials (our convention: `context.Context` first), safe concurrent writes (gorilla needs a manual write mutex), standard-library-only dependencies, built-in `Subprotocols` negotiation. Approved by the owner.
 - 2026-11-25 — Transport decisions: `ws.Server` is an `http.Handler`; version is chosen by the server's preference order among the client's offered subprotocols; a subprotocol mismatch completes the handshake without a subprotocol and then closes with 1002 (OCPP-J §3.2, same text in 1.6 and 2.0.1); a duplicate connection for the same ID replaces the old one (closed with 1008); ID rules: ≤48 chars, no `:` or `/`; unknown ID → 404, bad credentials → 401, failed certificate identity → 403; TLS ≥1.2 with the spec's GCM suites (plus ECDHE-RSA GCM); profile 3 requires subject CN == charge point ID and optionally O containing the operator name (A00.FR.404/405/511); WebSocket compression disabled; binary frames rejected; defaults: ping 30s, pong timeout 10s, read limit 1 MiB.
+- 2026-11-25 — `ws.Client` reconnects per OCPP-J §5.4 using the standard variable names (`WaitMinimum`, `RandomRange`, `RepeatTimes`); defaults 1s / 2s / 6 doublings when the config is the zero value. The wait is applied after every lost connection as well as after failed attempts; a missing common subprotocol is treated as a failed attempt and retried.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items

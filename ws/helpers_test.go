@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -17,7 +16,6 @@ import (
 
 // recorder collects server callbacks.
 type recorder struct {
-	mu           sync.Mutex
 	frames       chan string
 	connected    chan *Conn
 	disconnected chan disconnect
