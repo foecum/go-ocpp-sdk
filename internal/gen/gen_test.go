@@ -81,6 +81,8 @@ var oneBlock = []Block{{Pkg: "demo", Letter: "X", Title: "Demo", Messages: []str
 func testProfile(blocks []Block) Profile {
 	p := V201
 	p.Blocks = blocks
+	p.AppendicesRel = "" // the synthetic schemas have no appendices
+	p.Rules = nil
 	return p
 }
 
@@ -291,5 +293,119 @@ func TestDirectionsCoverEveryMessage(t *testing.T) {
 		if total != tc.total || fromStation != tc.fromStation || fromCSMS != tc.fromCSMS || one != tc.one || tc.p.Directions["DataTransfer"] != Both {
 			t.Errorf("%s: total=%d fromStation=%d fromCSMS=%d oneWay=%d", tc.p.Name, total, fromStation, fromCSMS, one)
 		}
+	}
+}
+
+// appendixFiles are minimal appendices CSV files, which the tests below break.
+func appendixFiles() map[string]string {
+	return map[string]string{
+		"components.csv":         "Component ; Description\nACDERCtrlr; Responsible for DER. More text.\n\nAuthCtrlr; Authorization.\n",
+		"variables.csv":          "Name ; DataType ; Unit ; Description\nACCurrent;decimal;A ; RMS current. More.\nACCurrent;decimal;A ; the same twice\nActive;boolean;;Is active\n",
+		"dm_components_vars.csv": "Specific Component;Variable;Instance;Required?;DataType;Unit;Description\n<generic>;ACCurrent;;no;decimal;A;x\nAuthCtrlr;Enabled;;yes;boolean;;y\n;;;;;;\n",
+		"units_of_measure.csv":   "Value;Description\nA;Amperes\na;Lower case a\nkWh;Kilowatt hour\n",
+		"reason_codes.csv":       "Group;Reason code;Description;Typically used for\nCharging Profiles;;;\n;InvalidProfile;Bad profile.;SetChargingProfile\nMiscellaneous;;;\n;Other;Something else;\n",
+		"security_events.csv":    "\xef\xbb\xbfSecurity Event;Description;Critical\nFirmwareUpdated;Updated;Yes\nStartup;Booted;No\n",
+		"idtokenenumtype.csv":    "Value;Description\nCentral;Central id\nLocal;yes\n",
+	}
+}
+
+func appendicesProfile() Profile {
+	p := testProfile(oneBlock)
+	p.AppendicesRel = "apx"
+	p.Extra = []extraSet{{"idtokenenumtype.csv", "IDTokenType", "IDTokenTypes", "idToken type"}}
+	return p
+}
+
+// generateWithAppendices generates the Demo message plus the appendices in files.
+func generateWithAppendices(t *testing.T, files map[string]string) (map[string][]byte, error) {
+	t.Helper()
+	root := t.TempDir()
+	schemas := filepath.Join(root, "schemas")
+	apx := filepath.Join(root, "apx")
+	for dir, content := range map[string]map[string]string{schemas: pair("Demo", ``, `"a":{"type":"string"}`, ``), apx: files} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for name, data := range content {
+			if data == "<dir>" { // a directory where a file is expected: opens, but cannot be read
+				if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				continue
+			}
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return generate(appendicesProfile(), schemas)
+}
+
+func TestGenerateAppendices(t *testing.T) {
+	out, err := generateWithAppendices(t, appendixFiles())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for file, want := range map[string][]string{
+		"components.go":     {"ComponentACDERCtrlr = \"ACDERCtrlr\"", "ComponentAuthCtrlr"},
+		"variables.go":      {"VariableACCurrent = \"ACCurrent\"", "VariableActive"},
+		"devicemodel.go":    {"{Component: \"AuthCtrlr\", Variable: \"Enabled\", Instance: \"\", Required: true, DataType: \"boolean\"", "Generic = \"<generic>\""},
+		"units.go":          {"UnitA = \"A\"", "UnitALower = \"a\"", "UnitKWh"},
+		"reasoncodes.go":    {"ReasonCodeInvalidProfile = \"InvalidProfile\"", "Group: \"Charging Profiles\"", "Group: \"Miscellaneous\""},
+		"securityevents.go": {"SecurityEventFirmwareUpdated", "Critical: true", "Critical: false"},
+		"idtokentypes.go":   {"IDTokenTypeCentral = \"Central\"", "IDTokenTypeLocal"},
+		"doc.go":            {"Package appendices", "outside its schemas"},
+	} {
+		src := string(out["v201/appendices/"+file])
+		for _, w := range want {
+			if !strings.Contains(src, w) {
+				t.Errorf("%s lacks %q:\n%s", file, w, src)
+			}
+		}
+	}
+	if strings.Count(string(out["v201/appendices/variables.go"]), "VariableACCurrent =") != 1 {
+		t.Error("a variable listed twice must become one constant")
+	}
+}
+
+func TestGenerateAppendicesRejectsBadInput(t *testing.T) {
+	for name, mutate := range map[string]func(map[string]string){
+		"missing components":      func(f map[string]string) { delete(f, "components.csv") },
+		"missing variables":       func(f map[string]string) { delete(f, "variables.csv") },
+		"missing device model":    func(f map[string]string) { delete(f, "dm_components_vars.csv") },
+		"missing units":           func(f map[string]string) { delete(f, "units_of_measure.csv") },
+		"missing reason codes":    func(f map[string]string) { delete(f, "reason_codes.csv") },
+		"missing security events": func(f map[string]string) { delete(f, "security_events.csv") },
+		"missing extra list":      func(f map[string]string) { delete(f, "idtokenenumtype.csv") },
+		"clashing components":     func(f map[string]string) { f["components.csv"] += "ACDERCtrlr;x\n" },
+		"unusable value":          func(f map[string]string) { f["components.csv"] += "---;x\n" },
+		"clashing units":          func(f map[string]string) { f["units_of_measure.csv"] += "A;again\nALower;clash\n" },
+		"clashing reason codes":   func(f map[string]string) { f["reason_codes.csv"] += ";InvalidProfile;twice;\n" },
+		"clashing events":         func(f map[string]string) { f["security_events.csv"] += "FirmwareUpdated;twice;No\n" },
+		"clashing extra values":   func(f map[string]string) { f["idtokenenumtype.csv"] += "Central;twice\n" },
+	} {
+		files := appendixFiles()
+		mutate(files)
+		if _, err := generateWithAppendices(t, files); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+	// A file that cannot be read.
+	files := appendixFiles()
+	files["components.csv"] = "<dir>"
+	if _, err := generateWithAppendices(t, files); err == nil {
+		t.Error("an unreadable CSV must fail")
+	}
+}
+
+func TestFirstSentence(t *testing.T) {
+	if got := firstSentence("One sentence. And another."); got != "One sentence." {
+		t.Errorf("%q", got)
+	}
+	if got := firstSentence(strings.Repeat("word ", 80)); len(got) != 220 || !strings.HasSuffix(got, "...") {
+		t.Errorf("a long text is cut: %d %q", len(got), got[len(got)-5:])
+	}
+	if got := firstSentence("it\\'s fine"); got != "it's fine" {
+		t.Errorf("%q", got)
 	}
 }

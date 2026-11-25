@@ -206,3 +206,13 @@ func (s *Server[H]) Lookup(id string) (*H, bool) {
 
 // IDs returns the identities of all connected charge points, sorted.
 func (s *Server[H]) IDs() []string { return s.ws.IDs() }
+
+// ForEach calls fn for every connected charge point, in identity order, until fn
+// returns false. A charge point that disconnects meanwhile is skipped.
+func (s *Server[H]) ForEach(fn func(*H) bool) {
+	for _, id := range s.ws.IDs() {
+		if h, ok := s.Lookup(id); ok && !fn(h) {
+			return
+		}
+	}
+}

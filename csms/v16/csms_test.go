@@ -449,6 +449,11 @@ func TestChargePointHandleAndListing(t *testing.T) {
 		startStation(t, url, id, nil)
 		recv(t, ev.connected)
 	}
+	var each []string
+	srv.ForEach(func(cp *csms.ChargePoint) bool { each = append(each, cp.ID()); return true })
+	if fmt.Sprint(each) != "[A B C]" {
+		t.Errorf("ForEach visited %v", each)
+	}
 	if got := srv.ChargePointIDs(); fmt.Sprint(got) != "[A B C]" {
 		t.Errorf("ChargePointIDs() = %v", got)
 	}

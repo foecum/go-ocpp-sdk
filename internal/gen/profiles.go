@@ -25,6 +25,11 @@ type Profile struct {
 	// JSON schemas do not. Each is a Go expression returning an error, in which
 	// v is the value and {T} stands for the qualifier of the shared types package.
 	Rules map[string][]string
+	// AppendicesRel is the directory of the appendices CSV files next to the
+	// schemas directory; if empty no appendices package is generated.
+	AppendicesRel string
+	// Extra lists value lists kept in CSV files that become constants.
+	Extra []extraSet
 	// OneWay lists the messages that are sent as unconfirmed SEND frames: their
 	// schema is "<Name>.json" and they have no response.
 	OneWay map[string]bool
@@ -94,6 +99,8 @@ var V201 = Profile{
 	Directions:   directionsOf(blocks201, stationMessages201),
 	HandlerNames: handlerNames201,
 	Rules:        rules201,
+
+	AppendicesRel: "Appendices_CSV_v1.5",
 }
 
 // blocks21 are the 2.0.1 blocks plus the messages OCPP 2.1 adds to them (in
@@ -141,6 +148,18 @@ var V21 = Profile{
 	}(),
 	Rules:  rules21,
 	OneWay: map[string]bool{"NotifyPeriodicEventStream": true},
+
+	AppendicesRel: "Appendices_CSV_v2.1",
+	Extra: []extraSet{
+		{"idtokenenumtype.csv", "IDTokenType", "IDTokenTypes", "idToken type"},
+		{"connectorenumtype.csv", "ConnectorType", "ConnectorTypes", "connector type"},
+		{"charginglimitsourceenumtype.csv", "ChargingLimitSource", "ChargingLimitSources", "charging limit source"},
+		{"paymentbrand.csv", "PaymentBrand", "PaymentBrands", "payment brand"},
+		{"paymentrecognition.csv", "PaymentRecognition", "PaymentRecognitions", "payment recognition"},
+		{"additional_info_types.csv", "AdditionalInfoType", "AdditionalInfoTypes", "additionalInfo type"},
+		{"additional_info_types_adhoc.csv", "AdditionalInfoAdHocType", "AdditionalInfoAdHocTypes", "additionalInfo type for ad hoc payments"},
+		{"signingmethod.csv", "SigningMethod", "SigningMethods", "signing method"},
+	},
 }
 
 // rules201 are the constraints OCPP 2.0.1 part 2 states in its field tables and

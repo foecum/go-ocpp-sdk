@@ -221,3 +221,22 @@ func TestUnconfirmedMessages(t *testing.T) {
 		t.Fatalf("frame %s %v", data, err)
 	}
 }
+
+func TestForEach(t *testing.T) {
+	connected := make(chan *handle, 3)
+	srv, url := newTestServer(t, func(c *Config[handle]) { c.OnConnect = func(h *handle) { connected <- h } })
+	for _, id := range []string{"CS3", "CS1", "CS2"} {
+		dial(t, url+"/ocpp/"+id)
+		<-connected
+	}
+	var got []string
+	srv.ForEach(func(h *handle) bool { got = append(got, h.ID()); return true })
+	if len(got) != 3 || got[0] != "CS1" || got[1] != "CS2" || got[2] != "CS3" {
+		t.Errorf("visited %v", got)
+	}
+	got = nil
+	srv.ForEach(func(h *handle) bool { got = append(got, h.ID()); return false })
+	if len(got) != 1 || got[0] != "CS1" {
+		t.Errorf("must stop when fn returns false: %v", got)
+	}
+}

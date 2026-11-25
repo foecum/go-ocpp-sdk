@@ -188,6 +188,11 @@ func generate(p Profile, schemaDir string) (map[string][]byte, error) {
 	if err := g.emitHighLevel(); err != nil {
 		return nil, err
 	}
+	if p.AppendicesRel != "" {
+		if err := g.emitAppendices(filepath.Join(schemaDir, "..", p.AppendicesRel)); err != nil {
+			return nil, err
+		}
+	}
 	return g.files, nil
 }
 

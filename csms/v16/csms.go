@@ -123,3 +123,8 @@ func (s *CSMS) ChargePoint(id string) (*ChargePoint, bool) { return s.srv.Lookup
 
 // ChargePointIDs returns the identities of all connected charge points, sorted.
 func (s *CSMS) ChargePointIDs() []string { return s.srv.IDs() }
+
+// ForEach calls fn for every connected charge point, in identity order, and stops when fn
+// returns false. A charge point that disconnects meanwhile is skipped. fn may call the
+// charge point, for example to broadcast a message, but should not block for long.
+func (s *CSMS) ForEach(fn func(*ChargePoint) bool) { s.srv.ForEach(fn) }

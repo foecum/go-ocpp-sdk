@@ -201,6 +201,11 @@ func TestChargingSessionScenario(t *testing.T) {
 	if ids := srv.ChargePointIDs(); len(ids) != 1 || ids[0] != "CS001" {
 		t.Errorf("ids %v", ids)
 	}
+	visited := 0
+	srv.ForEach(func(cp *csms.ChargePoint) bool { visited++; return cp.ID() == "CS001" })
+	if visited != 1 {
+		t.Errorf("ForEach visited %d charging stations", visited)
+	}
 	if _, ok := srv.ChargePoint("nobody"); ok {
 		t.Error("unknown station found")
 	}
