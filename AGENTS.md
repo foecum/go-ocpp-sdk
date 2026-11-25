@@ -125,6 +125,14 @@ go test -race ./...
 scripts/coverage.sh        # fails if any package is below 95% coverage
 ```
 
+The OCPP 2.0.1 sources under `v201/` are generated from the JSON schemas. After changing
+the generator (`internal/gen201`) or the schemas, regenerate them (the test fails when the
+committed files are out of date):
+
+```bash
+go test ./internal/gen201 -run TestGeneratedCodeIsUpToDate -update
+```
+
 Optional when available: `staticcheck ./...`, `golangci-lint run`.
 
 ## 6. How to work
@@ -232,28 +240,28 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
       SignedUpdateFirmware, SignedFirmwareStatusNotification
 
 ### Phase 8 — OCPP 2.0.1
-- [ ] Post a plan for 2.0.1 package split and wait for OK
-- [ ] `v201/types`: shared data types and enums (generate from JSON schemas if
+- [x] Post a plan for 2.0.1 package split and wait for OK
+- [x] `v201/types`: shared data types and enums (generate from JSON schemas if
       practical — record the generator approach in Decisions)
 - [ ] Functional blocks, one package each:
-  - [ ] A Security
-  - [ ] B Provisioning
-  - [ ] C Authorization
-  - [ ] D Local Authorization List
-  - [ ] E Transactions
-  - [ ] F Remote Control
-  - [ ] G Availability
-  - [ ] H Reservation
-  - [ ] I Tariff and Cost
-  - [ ] J Meter Values
-  - [ ] K Smart Charging
-  - [ ] L Firmware Management
-  - [ ] M ISO 15118 Certificate Management
-  - [ ] N Diagnostics
-  - [ ] O Display Message
-  - [ ] P Data Transfer
+  - [x] A Security
+  - [x] B Provisioning
+  - [x] C Authorization
+  - [x] D Local Authorization List
+  - [x] E Transactions
+  - [x] F Remote Control
+  - [x] G Availability
+  - [x] H Reservation
+  - [x] I Tariff and Cost
+  - [x] J Meter Values
+  - [x] K Smart Charging
+  - [x] L Firmware Management
+  - [x] M ISO 15118 Certificate Management
+  - [x] N Diagnostics
+  - [x] O Display Message
+  - [x] P Data Transfer
 - [ ] `chargepoint/v201` (charging station) and `csms/v201` high-level APIs
-- [ ] Validate every message against the official 2.0.1 JSON schemas in tests
+- [x] Validate every message against the official 2.0.1 JSON schemas in tests
 - [ ] Integration test: boot, authorize, TransactionEvent (Started/Updated/Ended),
       RequestStartTransaction from CSMS, GetVariables/SetVariables
 - [ ] `examples/v201/*` and README update
@@ -300,6 +308,10 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — `v0.1.0` tagged locally with the owner's OK (OCPP 1.6J complete). Not pushed: the owner pushes `main` and the tag, after CI and Pages have run.
 - 2026-11-25 — Security extension (approved by the owner): all its types live in `v16/security` (not in the shared `types`); its enumerations are generated from the whitepaper schemas and renamed where they clash with Core ones (`SignedFirmwareStatus`, `ExtendedMessageTrigger`, `SignedUpdateFirmwareStatus`); security event names are untyped string constants with `IsKnownEvent` / `IsCriticalEvent`; wiring is a `Security` field in both `Config`s with `Unimplemented...` handlers (Central System side: security events, SignCertificate, log and firmware status; station side: certificates, GetLog, SignedUpdateFirmware, ExtendedTriggerMessage). `internal/schematest` inlines `$ref` so the draft-06 schemas can be tested.
 - 2026-11-25 — No Claude/AI attribution trailers in commits (owner's request): the local history was rewritten to remove `Co-Authored-By` lines. Commits up to the first push (`1f8f63f`, tag `v0.1.0`) were already on the remote, so publishing the rewrite needs a force push by the owner.
+- 2026-11-25 — OCPP 2.0.1 types and messages are generated (approved by the owner): `internal/gen201` reads `docs/spec/2.0.1/schemas` and writes `v201/types` (143 shared definitions: structs with `Validate()`, enums with `IsValid()`) and one package per functional block (`v201/<block>`: `XRequest`/`XResponse`, `Validate()`, `Features()`, `doc.go`), plus `v201/v201.go` (`NewRegistry`). Generated files carry the standard "Code generated ... DO NOT EDIT" header and are committed; `TestGeneratedCodeIsUpToDate` fails if they drift (run with `-update` to rewrite). The block table and request directions are in `internal/gen201/tables.go` (64 messages: 24 from the station, 39 from the CSMS, DataTransfer both).
+- 2026-11-25 — 2.0.1 conventions: Go names strip the schema's `Type`/`EnumType` suffix and use initialisms (`IDToken`, `EVSEID`, `OCPPCSMSURL`); an enum whose name an object already has keeps `Enum` (`IDTokenEnum`); a field whose name clashes with the `Action` method is renamed (`CertificateAction`). Optional scalars/structs/timestamps are pointers, optional strings/enums use the empty value, arrays are always `omitempty` (an absent optional array is fine, a present one must meet minItems/maxItems). A required string must be non-empty except the allow-listed `SetVariableData.attributeValue`. Properties without a type (DataTransfer `data`) are `json.RawMessage`. `customData` is `*types.CustomData`, which keeps unknown vendor properties. Decimals are `float64`.
+- 2026-11-25 — `ocpp.DateTime` (root package) is the one DateTime type for every version; `v16/types.DateTime` and `v201/types.DateTime` are aliases of it. 2.0.1 validation helpers are in `internal/check`.
+- 2026-11-25 — Schema tests for 2.0.1 derive minimal and full sample payloads from each schema (`schematest.RunGenerated`) and break them in every way the schema forbids (required, maxLength, enum, type, date-time, minItems/maxItems, minimum/maximum). `schematest.AllowMutation` lists the rare cases where the spec text overrides the schema (1.6 `GetInstalledCertificateIds.conf` may be empty).
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
@@ -308,6 +320,7 @@ List anything not implemented or simplified, with a reason.
 
 - (none yet)
 - Opt-in retry/queue helper for transaction messages (StartTransaction, StopTransaction, MeterValues) per the 1.6 configuration keys: not implemented; the owner wants it added later (it needs persistence decisions).
+- 2.0.1: constraints stated only in the Part 2 field tables (not in the schemas) are not yet enforced; the review of those tables is still to do. Standardized components/variables, reason codes and security events (appendices CSVs) are not yet available as constants.
 - 1.6 string types: the specification restricts `CiString` and `String` to printable ASCII. Only lengths are enforced (schemas do the same), because real charge points send other characters. Revisit if strictness is wanted.
 - 1.6 security profiles: resolved by the security whitepaper (edition 3, now in `docs/spec/1.6/`). The Basic-auth password is the `AuthorizationKey` (16–20 bytes as 32–40 hex digits, sent as that text), which `ws.BasicAuthenticator` already compares as given; `security.CheckAuthorizationKey` / `GenerateAuthorizationKey` validate and create keys. Still open: the whitepaper tolerates TLS 1.0/1.1 for old stations; `ws` requires TLS 1.2 or newer and does not support them.
 - 1.6 security extension, leniencies: `serialNumber` in `CertificateHashData` is checked for hexadecimal characters only (the whitepaper says no leading zeros; stations that send them are accepted); `GetInstalledCertificateIds.conf` accepts an empty `certificateHashData` list (the spec says 0..*, the schema says at least 1; the spec wins); certificates and CSRs are checked as PEM blocks of the right type but their X.509 contents are not parsed.
