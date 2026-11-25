@@ -72,6 +72,7 @@ func loadSchema(t *testing.T, dir, name string) schemaDoc {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
 	}
+	raw = inlineRefs(raw, raw).(map[string]any) // the mutation walker reads plain nested schemas
 	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
 		t.Fatal(err)
@@ -347,4 +348,35 @@ func CheckActions(t testing.TB, features []ocpp.Feature) {
 			t.Errorf("%s: unexpected type names %s / %s", f.Action(), f.RequestType().Name(), f.ResponseType().Name())
 		}
 	}
+}
+
+// inlineRefs returns node with every {"$ref": "#/definitions/X"} replaced by a
+// copy of that definition, so the mutation walker needs no reference handling.
+// The schemas have no recursive definitions.
+func inlineRefs(node any, root map[string]any) any {
+	switch n := node.(type) {
+	case map[string]any:
+		if ref, ok := n["$ref"].(string); ok {
+			name := strings.TrimPrefix(ref, "#/definitions/")
+			defs, _ := root["definitions"].(map[string]any)
+			if def, found := defs[name]; found {
+				return inlineRefs(def, root)
+			}
+		}
+		out := make(map[string]any, len(n))
+		for k, v := range n {
+			if k == "definitions" {
+				continue
+			}
+			out[k] = inlineRefs(v, root)
+		}
+		return out
+	case []any:
+		out := make([]any, len(n))
+		for i, v := range n {
+			out[i] = inlineRefs(v, root)
+		}
+		return out
+	}
+	return node
 }
