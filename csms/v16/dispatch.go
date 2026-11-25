@@ -7,6 +7,7 @@ import (
 	"github.com/foecum/go-ocpp-sdk/internal/rpc"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
 	"github.com/foecum/go-ocpp-sdk/v16/firmware"
+	"github.com/foecum/go-ocpp-sdk/v16/security"
 )
 
 // dispatch routes an incoming request to the handler for its profile. A
@@ -53,6 +54,22 @@ func (s *CSMS) dispatch(ctx context.Context, cp *ChargePoint, req ocpp.Request) 
 		case *firmware.FirmwareStatusNotificationRequest:
 			if h := s.cfg.Firmware; h != nil {
 				return rpc.Return(h.FirmwareStatusNotification(ctx, cp, r))
+			}
+		case *security.LogStatusNotificationRequest:
+			if h := s.cfg.Security; h != nil {
+				return rpc.Return(h.LogStatusNotification(ctx, cp, r))
+			}
+		case *security.SecurityEventNotificationRequest:
+			if h := s.cfg.Security; h != nil {
+				return rpc.Return(h.SecurityEventNotification(ctx, cp, r))
+			}
+		case *security.SignCertificateRequest:
+			if h := s.cfg.Security; h != nil {
+				return rpc.Return(h.SignCertificate(ctx, cp, r))
+			}
+		case *security.SignedFirmwareStatusNotificationRequest:
+			if h := s.cfg.Security; h != nil {
+				return rpc.Return(h.SignedFirmwareStatusNotification(ctx, cp, r))
 			}
 		}
 		// No handler for the profile, or a message the SDK knows but a charge

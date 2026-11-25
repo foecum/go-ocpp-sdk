@@ -11,6 +11,7 @@ import (
 	"github.com/foecum/go-ocpp-sdk/v16/localauth"
 	"github.com/foecum/go-ocpp-sdk/v16/remotetrigger"
 	"github.com/foecum/go-ocpp-sdk/v16/reservation"
+	"github.com/foecum/go-ocpp-sdk/v16/security"
 	"github.com/foecum/go-ocpp-sdk/v16/smartcharging"
 	"github.com/foecum/go-ocpp-sdk/ws"
 )
@@ -139,4 +140,39 @@ func (cp *ChargePoint) GetCompositeSchedule(ctx context.Context, req smartchargi
 // TriggerMessage asks the charge point to send one of its own messages.
 func (cp *ChargePoint) TriggerMessage(ctx context.Context, req remotetrigger.TriggerMessageRequest) (*remotetrigger.TriggerMessageConfirmation, error) {
 	return call[remotetrigger.TriggerMessageConfirmation](ctx, cp, req)
+}
+
+// CertificateSigned delivers the certificate signed after a SignCertificate request.
+func (cp *ChargePoint) CertificateSigned(ctx context.Context, req security.CertificateSignedRequest) (*security.CertificateSignedConfirmation, error) {
+	return call[security.CertificateSignedConfirmation](ctx, cp, req)
+}
+
+// DeleteCertificate deletes an installed certificate.
+func (cp *ChargePoint) DeleteCertificate(ctx context.Context, req security.DeleteCertificateRequest) (*security.DeleteCertificateConfirmation, error) {
+	return call[security.DeleteCertificateConfirmation](ctx, cp, req)
+}
+
+// ExtendedTriggerMessage asks the charge point to send one of its own messages, including those of the security extension.
+func (cp *ChargePoint) ExtendedTriggerMessage(ctx context.Context, req security.ExtendedTriggerMessageRequest) (*security.ExtendedTriggerMessageConfirmation, error) {
+	return call[security.ExtendedTriggerMessageConfirmation](ctx, cp, req)
+}
+
+// GetInstalledCertificateIds lists the certificates installed on the charge point.
+func (cp *ChargePoint) GetInstalledCertificateIds(ctx context.Context, req security.GetInstalledCertificateIdsRequest) (*security.GetInstalledCertificateIdsConfirmation, error) {
+	return call[security.GetInstalledCertificateIdsConfirmation](ctx, cp, req)
+}
+
+// GetLog asks the charge point to upload a log.
+func (cp *ChargePoint) GetLog(ctx context.Context, req security.GetLogRequest) (*security.GetLogConfirmation, error) {
+	return call[security.GetLogConfirmation](ctx, cp, req)
+}
+
+// InstallCertificate installs a root certificate.
+func (cp *ChargePoint) InstallCertificate(ctx context.Context, req security.InstallCertificateRequest) (*security.InstallCertificateConfirmation, error) {
+	return call[security.InstallCertificateConfirmation](ctx, cp, req)
+}
+
+// SignedUpdateFirmware has the charge point download, verify and install signed firmware.
+func (cp *ChargePoint) SignedUpdateFirmware(ctx context.Context, req security.SignedUpdateFirmwareRequest) (*security.SignedUpdateFirmwareConfirmation, error) {
+	return call[security.SignedUpdateFirmwareConfirmation](ctx, cp, req)
 }

@@ -33,6 +33,10 @@ type Config struct {
 	// firmware status notifications). If nil, they are answered with
 	// NotSupported.
 	Firmware FirmwareHandler
+	// Security handles the security extension calls (security events, signing
+	// requests and status notifications). If nil, they are answered with
+	// NotSupported.
+	Security SecurityHandler
 	// Authenticator checks every connection request. See ws.BasicAuthenticator
 	// and ws.ClientCertAuthenticator. Without one anyone may connect: use only
 	// on trusted networks.
