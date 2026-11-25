@@ -2,6 +2,7 @@ package ocppj
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
@@ -91,5 +92,80 @@ func TestDecodeResponse(t *testing.T) {
 	var de *DecodeError
 	if _, err := r.DecodeResponse("Ping", []byte(`{"reply":"bad"}`)); !errors.As(err, &de) || de.Code != ocpp.PropertyConstraintViolation {
 		t.Errorf("invalid: %v", err)
+	}
+}
+
+type reqNested struct {
+	Count int             `json:"count" ocpp:"required"`
+	Mode  string          `json:"mode,omitempty"`
+	Items []reqItem       `json:"items,omitempty"`
+	One   *reqItem        `json:"one,omitempty"`
+	Skip  int             `json:"-" ocpp:"required"`
+	Plain int             // no json tag: key is the field name
+	Embed struct{ X int } `json:"embed"`
+}
+
+type reqItem struct {
+	At    int `json:"at" ocpp:"required"`
+	Value int `json:"value,omitempty"`
+}
+
+func (reqNested) Action() string  { return "Nested" }
+func (reqNested) Validate() error { return nil }
+
+type respNested struct{}
+
+func (respNested) Action() string  { return "Nested" }
+func (respNested) Validate() error { return nil }
+
+func TestRequiredKeysAtAnyDepth(t *testing.T) {
+	f, err := ocpp.NewFeature(reqNested{}, respNested{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry(ocpp.V201)
+	if err := r.Register(f); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name, payload string
+		wantField     string // empty: success
+	}{
+		{"ok", `{"count":0}`, ""},
+		{"ok nested", `{"count":1,"items":[{"at":0},{"at":5,"value":2}],"one":{"at":1}}`, ""},
+		{"missing count", `{}`, "count"},
+		{"null count", `{"count":null}`, "count"},
+		{"missing in slice item", `{"count":1,"items":[{"at":0},{"value":2}]}`, "items[1].at"},
+		{"missing in pointer", `{"count":1,"one":{}}`, "one.at"},
+		{"null optional is fine", `{"count":1,"one":null,"items":null}`, ""},
+		{"non-object slice ignored here", `{"count":1,"items":5}`, "~type"},
+	}
+	for _, tt := range tests {
+		_, err := r.DecodeRequest("Nested", []byte(tt.payload))
+		switch {
+		case tt.wantField == "":
+			if err != nil {
+				t.Errorf("%s: %v", tt.name, err)
+			}
+		case tt.wantField == "~type":
+			var de *DecodeError
+			if !errors.As(err, &de) || de.Code != ocpp.TypeConstraintViolation {
+				t.Errorf("%s: %v", tt.name, err)
+			}
+		default:
+			var de *DecodeError
+			var ve *ocpp.ValidationError
+			if !errors.As(err, &de) || !errors.As(err, &ve) || !ve.Missing ||
+				de.Code != ocpp.OccurrenceConstraintViolation || ve.Field != tt.wantField {
+				t.Errorf("%s: got %v", tt.name, err)
+			}
+		}
+	}
+	// A payload that is not an object is left to the decoder to reject.
+	if err := checkRequired(reflect.TypeOf(reqNested{}), []byte(`[1]`), ""); err != nil {
+		t.Errorf("non-object: %v", err)
+	}
+	if err := checkRequired(reflect.TypeOf(&reqNested{}), []byte(`{"count":1}`), ""); err != nil {
+		t.Errorf("pointer type: %v", err)
 	}
 }

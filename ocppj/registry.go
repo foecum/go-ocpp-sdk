@@ -113,6 +113,9 @@ func (r *Registry) decode(t reflect.Type, payload json.RawMessage) (any, error) 
 		}
 		return nil, &DecodeError{Code: code, Err: err}
 	}
+	if err := checkRequired(t, payload, ""); err != nil {
+		return nil, &DecodeError{Code: r.validationCode(err), Err: err}
+	}
 	if err := ptr.(validator).Validate(); err != nil {
 		return nil, &DecodeError{Code: r.validationCode(err), Err: err}
 	}
