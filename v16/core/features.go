@@ -1,39 +1,29 @@
 package core
 
-import ocpp "github.com/foecum/go-ocpp-sdk"
+import (
+	ocpp "github.com/foecum/go-ocpp-sdk"
+	"github.com/foecum/go-ocpp-sdk/internal/featureset"
+)
 
 // Features returns the feature (action plus request and response types) of
 // every Core profile message, ready to register in an ocppj.Registry.
 func Features() []ocpp.Feature {
-	pairs := []struct {
-		req  ocpp.Request
-		resp ocpp.Response
-	}{
-		{AuthorizeRequest{}, AuthorizeConfirmation{}},
-		{BootNotificationRequest{}, BootNotificationConfirmation{}},
-		{ChangeAvailabilityRequest{}, ChangeAvailabilityConfirmation{}},
-		{ChangeConfigurationRequest{}, ChangeConfigurationConfirmation{}},
-		{ClearCacheRequest{}, ClearCacheConfirmation{}},
-		{DataTransferRequest{}, DataTransferConfirmation{}},
-		{GetConfigurationRequest{}, GetConfigurationConfirmation{}},
-		{HeartbeatRequest{}, HeartbeatConfirmation{}},
-		{MeterValuesRequest{}, MeterValuesConfirmation{}},
-		{RemoteStartTransactionRequest{}, RemoteStartTransactionConfirmation{}},
-		{RemoteStopTransactionRequest{}, RemoteStopTransactionConfirmation{}},
-		{ResetRequest{}, ResetConfirmation{}},
-		{StartTransactionRequest{}, StartTransactionConfirmation{}},
-		{StatusNotificationRequest{}, StatusNotificationConfirmation{}},
-		{StopTransactionRequest{}, StopTransactionConfirmation{}},
-		{UnlockConnectorRequest{}, UnlockConnectorConfirmation{}},
-	}
-	features := make([]ocpp.Feature, 0, len(pairs))
-	for _, p := range pairs {
-		f, err := ocpp.NewFeature(p.req, p.resp)
-		if err != nil {
-			// The table above is fixed; a mismatch is a programming error caught by tests.
-			panic("v16/core: " + err.Error())
-		}
-		features = append(features, f)
-	}
-	return features
+	return featureset.Build(
+		featureset.Pair{Req: AuthorizeRequest{}, Resp: AuthorizeConfirmation{}},
+		featureset.Pair{Req: BootNotificationRequest{}, Resp: BootNotificationConfirmation{}},
+		featureset.Pair{Req: ChangeAvailabilityRequest{}, Resp: ChangeAvailabilityConfirmation{}},
+		featureset.Pair{Req: ChangeConfigurationRequest{}, Resp: ChangeConfigurationConfirmation{}},
+		featureset.Pair{Req: ClearCacheRequest{}, Resp: ClearCacheConfirmation{}},
+		featureset.Pair{Req: DataTransferRequest{}, Resp: DataTransferConfirmation{}},
+		featureset.Pair{Req: GetConfigurationRequest{}, Resp: GetConfigurationConfirmation{}},
+		featureset.Pair{Req: HeartbeatRequest{}, Resp: HeartbeatConfirmation{}},
+		featureset.Pair{Req: MeterValuesRequest{}, Resp: MeterValuesConfirmation{}},
+		featureset.Pair{Req: RemoteStartTransactionRequest{}, Resp: RemoteStartTransactionConfirmation{}},
+		featureset.Pair{Req: RemoteStopTransactionRequest{}, Resp: RemoteStopTransactionConfirmation{}},
+		featureset.Pair{Req: ResetRequest{}, Resp: ResetConfirmation{}},
+		featureset.Pair{Req: StartTransactionRequest{}, Resp: StartTransactionConfirmation{}},
+		featureset.Pair{Req: StatusNotificationRequest{}, Resp: StatusNotificationConfirmation{}},
+		featureset.Pair{Req: StopTransactionRequest{}, Resp: StopTransactionConfirmation{}},
+		featureset.Pair{Req: UnlockConnectorRequest{}, Resp: UnlockConnectorConfirmation{}},
+	)
 }

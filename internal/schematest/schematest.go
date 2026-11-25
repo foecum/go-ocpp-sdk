@@ -8,7 +8,7 @@
 //   - the re-encoded JSON is valid against the schema;
 //   - every way of breaking the sample that the schema rejects (a missing
 //     required key, a string over maxLength, a value outside an enum, a wrong
-//     JSON type, a malformed date-time) is also rejected by the registry.
+//     JSON type, a malformed date-time or URI) is also rejected by the registry.
 //
 // The registry is deliberately more lenient than the schemas in one respect:
 // it ignores unknown properties, as real charge points send them.
@@ -25,6 +25,8 @@ import (
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	ocpp "github.com/foecum/go-ocpp-sdk"
 
 	"github.com/foecum/go-ocpp-sdk/ocppj"
 )
@@ -228,8 +230,11 @@ func propertyMutations(schema map[string]any, value any, path []any, out emit) {
 		if enum, ok := schema["enum"].([]any); ok && len(enum) > 0 {
 			set("value outside enum", "NotInTheEnum")
 		}
-		if schema["format"] == "date-time" {
+		switch schema["format"] {
+		case "date-time":
 			set("malformed date-time", "yesterday-ish")
+		case "uri":
+			set("malformed uri", "not a uri")
 		}
 	case "integer":
 		set("wrong type (string instead of integer)", "abc")
@@ -313,4 +318,33 @@ func pathString(path []any) string {
 		return "(root)"
 	}
 	return sb.String()
+}
+
+// NewRegistry returns a registry for OCPP 1.6 holding the given features.
+func NewRegistry(t testing.TB, features []ocpp.Feature) *ocppj.Registry {
+	t.Helper()
+	reg := ocppj.NewRegistry(ocpp.V16)
+	for _, f := range features {
+		if err := reg.Register(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return reg
+}
+
+// CheckActions verifies that every feature's request and confirmation types
+// report the feature's action, and that the type names follow the specification
+// ("<Action>Request" and "<Action>Confirmation").
+func CheckActions(t testing.TB, features []ocpp.Feature) {
+	t.Helper()
+	for _, f := range features {
+		req := reflect.New(f.RequestType()).Interface().(ocpp.Request)
+		resp := reflect.New(f.ResponseType()).Interface().(ocpp.Response)
+		if req.Action() != f.Action() || resp.Action() != f.Action() {
+			t.Errorf("%s: request reports %q, confirmation %q", f.Action(), req.Action(), resp.Action())
+		}
+		if f.RequestType().Name() != f.Action()+"Request" || f.ResponseType().Name() != f.Action()+"Confirmation" {
+			t.Errorf("%s: unexpected type names %s / %s", f.Action(), f.RequestType().Name(), f.ResponseType().Name())
+		}
+	}
 }
