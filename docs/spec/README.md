@@ -25,7 +25,8 @@ If a schema and the spec text still conflict after errata, record it in
 | `ocpp-j-1.6-specification.pdf` | OCPP-J framing and transport |
 | `ocpp-1.6-errata-sheet.pdf` | Errata for the main specification |
 | `ocpp-j-1.6-errata-sheet.pdf` | Errata for OCPP-J |
-| `schemas/json/*.json` | JSON schemas, one per request and response |
+| `OCPP 1.6 security whitepaper edition 3.pdf` | The security extension: certificate management, signed firmware, logs, security events and the security profiles |
+| `schemas/json/*.json` | JSON schemas, one per request and response. The core and the security extension messages share this folder |
 | `schemas/soap/*.wsdl` | SOAP WSDLs. Present in the OCA download, **unused** |
 
 ### `2.0.1/` (OCPP 2.0.1 edition 4)
