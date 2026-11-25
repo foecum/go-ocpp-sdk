@@ -186,7 +186,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
 <div class="hero" id="top">
   <div class="hero-inner">
     <div>
-      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 4 of 10 complete</span>
+      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 5 of 10 complete</span>
       <h1>Talk <em>OCPP</em> from Go.</h1>
       <p class="lead">An SDK for the Open Charge Point Protocol, the language EV charging stations speak to their central system. Both roles, JSON over WebSocket, built on the standard library.</p>
       <div class="cta">
@@ -246,7 +246,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-alpha</strong>The protocol core (<code>ocpp</code>, <code>ocppj</code>), the WebSocket transport (<code>ws</code>), the OCPP 1.6 Core profile messages (<code>v16</code>) and the high-level <code>csms</code> and <code>chargepoint</code> APIs exist and are described below. The other 1.6 profiles, OCPP 2.0.1 and ready-made examples are still to come, and the API may still change.</div>
+      <div class="note warn"><strong>Pre-alpha</strong>The protocol core (<code>ocpp</code>, <code>ocppj</code>), the WebSocket transport (<code>ws</code>), all 28 OCPP 1.6 messages (<code>v16</code>) and the high-level <code>csms</code> and <code>chargepoint</code> APIs exist and are described below. Ready-made examples, OCPP 2.0.1 and a tagged release are still to come, and the API may still change.</div>
     </section>
 
     <section id="install">
@@ -408,7 +408,7 @@ cp, ok := srv.ChargePoint("CS001") // the live connection, if any
 ids := srv.ChargePoints()          // connected identities, sorted</code></pre></div>
       <ul>
         <li>Charge points connect to <code>ws://host/ocpp/&lt;identity&gt;</code>: the identity is the last path segment of the URL.</li>
-        <li><code>cp.ChangeAvailability</code>, <code>ChangeConfiguration</code>, <code>ClearCache</code>, <code>DataTransfer</code>, <code>GetConfiguration</code>, <code>RemoteStartTransaction</code>, <code>RemoteStopTransaction</code>, <code>Reset</code> and <code>UnlockConnector</code> call the charge point. Each takes a <code>core.XRequest</code> by value and returns <code>*core.XConfirmation</code>.</li>
+        <li>Typed calls to the charge point, one per Central System message: <code>ChangeAvailability</code>, <code>ChangeConfiguration</code>, <code>ClearCache</code>, <code>DataTransfer</code>, <code>GetConfiguration</code>, <code>RemoteStartTransaction</code>, <code>RemoteStopTransaction</code>, <code>Reset</code>, <code>UnlockConnector</code> (Core), <code>GetDiagnostics</code>, <code>UpdateFirmware</code>, <code>GetLocalListVersion</code>, <code>SendLocalList</code>, <code>ReserveNow</code>, <code>CancelReservation</code>, <code>SetChargingProfile</code>, <code>ClearChargingProfile</code>, <code>GetCompositeSchedule</code> and <code>TriggerMessage</code>. Each takes its request type by value and returns a pointer to the confirmation.</li>
         <li>A <code>*csms.ChargePoint</code> belongs to one connection. If the station reconnects, look it up again; the old value fails with <code>ocpp.ErrNotConnected</code>. <code>cp.Close()</code> drops the connection.</li>
         <li>Handlers receive the <code>*csms.ChargePoint</code>, so they can call the station back while handling its request.</li>
         <li>Other options: <code>TLSConfig</code> (wss, see the security profiles below), <code>CallTimeout</code>, <code>PingInterval</code>, <code>PongTimeout</code>, <code>ReadLimit</code> and <code>Logger</code>.</li>
@@ -425,26 +425,61 @@ ids := srv.ChargePoints()          // connected identities, sorted</code></pre><
 go cp.Run(ctx)             // connects, reconnects with back-off; Close() stops it
 err = cp.WaitConnected(ctx)</code></pre></div>
       <ul>
-        <li><code>Authorize</code>, <code>BootNotification</code>, <code>DataTransfer</code>, <code>Heartbeat</code>, <code>MeterValues</code>, <code>StartTransaction</code>, <code>StatusNotification</code> and <code>StopTransaction</code> call the Central System.</li>
+        <li>Typed calls to the Central System: <code>Authorize</code>, <code>BootNotification</code>, <code>DataTransfer</code>, <code>Heartbeat</code>, <code>MeterValues</code>, <code>StartTransaction</code>, <code>StatusNotification</code>, <code>StopTransaction</code>, <code>DiagnosticsStatusNotification</code> and <code>FirmwareStatusNotification</code>.</li>
         <li>The station never sends <code>BootNotification</code> or <code>Heartbeat</code> by itself. Send a BootNotification after each start, and Heartbeats at the interval the Central System returns.</li>
         <li><code>Connected()</code> and <code>WaitConnected(ctx)</code> tell you whether the link is up. Other options: <code>Reconnect</code> (see below), <code>TLSConfig</code>, <code>CallTimeout</code>, <code>PingInterval</code>, <code>PongTimeout</code>, <code>ReadLimit</code> and <code>Logger</code>.</li>
       </ul>
       <h3>Writing handlers</h3>
-      <p>A handler implements <code>csms.CoreHandler</code> or <code>chargepoint.CoreHandler</code>. Embed the matching <code>Unimplemented</code> struct to implement only some methods:</p>
+      <p>Each profile has its own handler interface, set in the matching <code>Config</code> field. Embed the matching <code>Unimplemented</code> struct to implement only some methods:</p>
       <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">type handler struct{ chargepoint.UnimplementedCoreHandler }
 
 func (handler) Reset(ctx context.Context, req *core.ResetRequest) (*core.ResetConfirmation, error) {
 	return &amp;core.ResetConfirmation{Status: types.ResetStatusAccepted}, nil
 }</code></pre></div>
       <div class="tablewrap"><table>
+        <tr><th>Profile</th><th>Central System <code>csms.Config</code></th><th>Charge point <code>chargepoint.Config</code></th></tr>
+        <tr><td>Core</td><td><code>Core</code>: <code>CoreHandler</code></td><td><code>Core</code>: <code>CoreHandler</code></td></tr>
+        <tr><td>Firmware Management</td><td><code>Firmware</code>: <code>FirmwareHandler</code> (status notifications)</td><td><code>Firmware</code>: <code>FirmwareHandler</code> (GetDiagnostics, UpdateFirmware)</td></tr>
+        <tr><td>Local Auth List Management</td><td>none: only the Central System sends these</td><td><code>LocalAuth</code>: <code>LocalAuthHandler</code></td></tr>
+        <tr><td>Reservation</td><td>none</td><td><code>Reservation</code>: <code>ReservationHandler</code></td></tr>
+        <tr><td>Smart Charging</td><td>none</td><td><code>SmartCharging</code>: <code>SmartChargingHandler</code></td></tr>
+        <tr><td>Remote Trigger</td><td>none</td><td><code>RemoteTrigger</code>: <code>RemoteTriggerHandler</code></td></tr>
+      </table></div>
+      <div class="tablewrap"><table>
         <tr><th>Situation</th><th>What the peer receives</th></tr>
-        <tr><td>No handler set, or a method left to the embedded <code>Unimplemented</code> struct</td><td><code>NotSupported</code></td></tr>
+        <tr><td>No handler set for the profile, or a method left to the embedded <code>Unimplemented</code> struct</td><td><code>NotSupported</code></td></tr>
         <tr><td>An action the SDK does not know</td><td><code>NotImplemented</code></td></tr>
         <tr><td>A known message that is not meant for this side (for example a station sent <code>ChangeAvailability</code>)</td><td><code>NotSupported</code></td></tr>
         <tr><td>An invalid payload (missing field, wrong type, bad value)</td><td>The matching <code>OccurenceConstraintViolation</code>, <code>TypeConstraintViolation</code> or <code>PropertyConstraintViolation</code></td></tr>
         <tr><td>The handler returns a <code>*ocpp.CallError</code></td><td>That error, with its code, description and details</td></tr>
         <tr><td>The handler returns any other error, returns nothing, or panics</td><td><code>InternalError</code> (the error text is not sent); the program keeps running</td></tr>
       </table></div>
+      <h3>Example: smart charging</h3>
+      <p>A station that accepts charging profiles, and a Central System that sets one. The handler field is named after the profile:</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">type stationHandler struct{ chargepoint.UnimplementedSmartChargingHandler }
+
+func (stationHandler) SetChargingProfile(ctx context.Context, req *smartcharging.SetChargingProfileRequest) (*smartcharging.SetChargingProfileConfirmation, error) {
+	return &amp;smartcharging.SetChargingProfileConfirmation{Status: types.ChargingProfileStatusAccepted}, nil
+}
+
+station, err := chargepoint.New(chargepoint.Config{
+	URL: "ws://csms.example.com/ocpp", ID: "CS001",
+	SmartCharging: stationHandler{},
+})
+
+// On the Central System, with cp from srv.ChargePoint("CS001"):
+conf, err := cp.SetChargingProfile(ctx, smartcharging.SetChargingProfileRequest{
+	ConnectorID: 1,
+	CSChargingProfiles: types.ChargingProfile{
+		ChargingProfileID:      1,
+		ChargingProfilePurpose: types.ChargingProfilePurposeTypeTxDefaultProfile,
+		ChargingProfileKind:    types.ChargingProfileKindTypeAbsolute,
+		ChargingSchedule: types.ChargingSchedule{
+			ChargingRateUnit:       types.ChargingRateUnitTypeA,
+			ChargingSchedulePeriod: []types.ChargingSchedulePeriod{{StartPeriod: 0, Limit: 16}},
+		},
+	},
+})</code></pre></div>
       <h3>When the connection is down</h3>
       <ul>
         <li>A call made while disconnected fails at once with an error matching <code>ocpp.ErrNotConnected</code>. Nothing is queued or retried for you.</li>
@@ -456,7 +491,7 @@ func (handler) Reset(ctx context.Context, req *core.ResetRequest) (*core.ResetCo
 
     <section id="messages">
       <h2>OCPP 1.6 messages</h2>
-      <p><code>v16.NewRegistry()</code> returns an <code>ocppj.Registry</code> with every implemented message, ready for an <code>Endpoint</code>. The messages live in <code>v16/core</code>; shared types and enumerations live in <code>v16/types</code>.</p>
+      <p><code>v16.NewRegistry()</code> returns an <code>ocppj.Registry</code> with every implemented message, ready for an <code>Endpoint</code>. The messages live in one package per profile (<code>v16/core</code>, <code>firmware</code>, <code>localauth</code>, <code>reservation</code>, <code>smartcharging</code> and <code>remotetrigger</code>); shared types and enumerations live in <code>v16/types</code>.</p>
       <h3>Naming</h3>
       <p>Each message is a pair named after the specification: <code>BootNotificationRequest</code> (the <code>.req</code> PDU) and <code>BootNotificationConfirmation</code> (the <code>.conf</code> PDU). In a handler, switch on the request type (<code>*core.BootNotificationRequest</code>) and return the matching confirmation.</p>
       <h3>Building and validating messages</h3>
@@ -491,25 +526,37 @@ fmt.Println(bad.Validate()) // ocpp: invalid field "connectorId": must be at lea
       <p>Your own messages (vendor extensions through <code>DataTransfer</code> are usually enough, but custom features work too) need <code>Action()</code> and <code>Validate()</code>, and a <code>ocpp:"required"</code> struct tag on every required field so the registry can reject payloads that omit it.</p>
       <h3>Supported messages</h3>
       <div class="tablewrap"><table>
-        <tr><th>Message</th><th>Direction</th><th>OCPP 1.6 Core</th></tr>
-        <tr><td><code>Authorize</code></td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>BootNotification</code></td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>ChangeAvailability</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>ChangeConfiguration</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>ClearCache</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>DataTransfer</code></td><td>Either direction</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>GetConfiguration</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>Heartbeat</code></td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>MeterValues</code></td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>RemoteStartTransaction</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>RemoteStopTransaction</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>Reset</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>StartTransaction</code></td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>StatusNotification</code></td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>StopTransaction</code></td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
-        <tr><td><code>UnlockConnector</code></td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><th>Message</th><th>Profile</th><th>Direction</th><th>OCPP 1.6</th></tr>
+        <tr><td><code>Authorize</code></td><td>Core</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>BootNotification</code></td><td>Core</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>ChangeAvailability</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>ChangeConfiguration</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>ClearCache</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>DataTransfer</code></td><td>Core</td><td>Either direction</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>GetConfiguration</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>Heartbeat</code></td><td>Core</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>MeterValues</code></td><td>Core</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>RemoteStartTransaction</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>RemoteStopTransaction</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>Reset</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>StartTransaction</code></td><td>Core</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>StatusNotification</code></td><td>Core</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>StopTransaction</code></td><td>Core</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>UnlockConnector</code></td><td>Core</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>GetDiagnostics</code></td><td>Firmware Management</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>DiagnosticsStatusNotification</code></td><td>Firmware Management</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>FirmwareStatusNotification</code></td><td>Firmware Management</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>UpdateFirmware</code></td><td>Firmware Management</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>GetLocalListVersion</code></td><td>Local Auth List Management</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>SendLocalList</code></td><td>Local Auth List Management</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>ReserveNow</code></td><td>Reservation</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>CancelReservation</code></td><td>Reservation</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>SetChargingProfile</code></td><td>Smart Charging</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>ClearChargingProfile</code></td><td>Smart Charging</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>GetCompositeSchedule</code></td><td>Smart Charging</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
+        <tr><td><code>TriggerMessage</code></td><td>Remote Trigger</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
       </table></div>
-      <p>Planned, in later phases: Firmware Management, Local Auth List Management, Reservation, Smart Charging, Remote Trigger (1.6), then the 1.6 security extension and OCPP 2.0.1.</p>
+      <p>All 28 messages of OCPP 1.6 (JSON) are supported. Planned, in later phases: the 1.6 security extension, then OCPP 2.0.1.</p>
     </section>
 
     <section id="transport">
@@ -793,12 +840,13 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>2</td><td>WebSocket transport <code>ws</code>, security profiles 1–3</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>3</td><td>OCPP 1.6 types and Core profile messages</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>4</td><td>High-level <code>chargepoint/v16</code> and <code>csms/v16</code></td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>5–6</td><td>Remaining 1.6 profiles, examples, v0.1.0</td><td><span class="badge b-next">Next</span></td></tr>
+        <tr><td>5</td><td>Remaining 1.6 profiles: firmware, local auth list, reservation, smart charging, remote trigger</td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>6</td><td>Examples, docs, v0.1.0</td><td><span class="badge b-next">Next</span></td></tr>
         <tr><td>7–8</td><td>1.6 security extension, OCPP 2.0.1</td><td><span class="badge b-plan">Planned</span></td></tr>
         <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
       </table></div>
       <h3>Supported messages</h3>
-      <p>The 16 messages of the OCPP 1.6 Core profile are supported; see the <a href="#messages">table above</a>.</p>
+      <p>All 28 OCPP 1.6 messages are supported; see the <a href="#messages">table above</a>.</p>
     </section>
 
     <section id="contributing">

@@ -216,7 +216,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Reservation: ReserveNow, CancelReservation
 - [x] Smart Charging: SetChargingProfile, ClearChargingProfile, GetCompositeSchedule
 - [x] Remote Trigger: TriggerMessage
-- [ ] Wire all profiles into `chargepoint/v16` and `csms/v16`; tests for each
+- [x] Wire all profiles into `chargepoint/v16` and `csms/v16`; tests for each
 
 ### Phase 6 — 1.6 examples and docs
 - [ ] `examples/v16/csms` and `examples/v16/chargepoint` that talk to each other
@@ -294,6 +294,8 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — High-level API (approved by the owner): packages `csms/v16` and `chargepoint/v16` are named `csms` and `chargepoint`; handlers are one interface per profile (`CoreHandler`) with embeddable `Unimplemented...` structs that answer `NotSupported`; a nil profile handler also answers `NotSupported`, an action the SDK does not know answers `NotImplemented`. CSMS handlers receive the `*csms.ChargePoint` so they can call the station back; outbound requests are passed by value, inbound ones by pointer. A `*csms.ChargePoint` is tied to one connection. A panicking handler is answered with `InternalError`; handler error text is never sent to the peer (only `*ocpp.CallError` is passed through).
 - 2026-11-25 — Offline behaviour (approved by the owner): calls fail fast with `ocpp.ErrNotConnected` (also for a call interrupted by a lost connection) and nothing is queued or retried by the SDK; the station never sends BootNotification or Heartbeat on its own. An opt-in retry helper for transaction messages (1.6 `TransactionMessageAttempts` / `TransactionMessageRetryInterval`) is planned for later.
 - 2026-11-25 — Shared helpers for the two packages live in `internal/rpc`. Construction seams (`newRegistry`, `newEndpoint`, `newWSServer`) are package variables that tests replace to reach error paths that cannot occur otherwise.
+- 2026-11-25 — Remaining 1.6 profiles: one package per profile (`firmware`, `localauth`, `reservation`, `smartcharging`, `remotetrigger`), each with `Features()`; `v16.NewRegistry()` registers all 28 messages. `GetDiagnostics`/`UpdateFirmware` locations must be absolute URIs (the schemas' `uri` format). Rules from the spec text enforced beyond the schemas: `SendLocalList` idTags unique (case-insensitive) and `idTagInfo` present on every entry of a Full update; `GetLocalListVersion` returns ≥ -1; `TriggerMessage.connectorId` > 0 when present; connector ids ≥ 0 for ReserveNow, SetChargingProfile, ClearChargingProfile and GetCompositeSchedule. `SendLocalList.listVersion` is not constrained (the spec states no limit).
+- 2026-11-25 — Handler wiring for those profiles follows the approved Phase 4 shape: one optional `Config` field per profile (`csms.Config.Firmware`; `chargepoint.Config.Firmware/LocalAuth/Reservation/SmartCharging/RemoteTrigger`), a nil one answers `NotSupported`. Profiles whose messages only flow from the Central System need no CSMS-side handler. Shared test helpers live in `internal/schematest`; profile `Features()` are built with `internal/featureset`.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
