@@ -186,7 +186,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
 <div class="hero" id="top">
   <div class="hero-inner">
     <div>
-      <span class="pill"><span class="dot"></span> Pre-1.0 · OCPP 1.6J complete</span>
+      <span class="pill"><span class="dot"></span> v1.0 · OCPP 1.6J and 2.0.1</span>
       <h1>Talk <em>OCPP</em> from Go.</h1>
       <p class="lead">An SDK for the Open Charge Point Protocol, the language EV charging stations speak to their central system. Both roles, JSON over WebSocket, built on the standard library.</p>
       <div class="cta">
@@ -248,7 +248,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages and the 11 of the security extension, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is in progress: all 64 messages and both high-level APIs exist, see <a href="#v201">OCPP 2.0.1</a>, with runnable examples. The release is still to come.</div>
+      <div class="note"><strong>v1.0</strong>OCPP 1.6J (all 28 messages and the 11 of the security extension) and OCPP 2.0.1 (all 64 messages) are complete for both roles, with the high-level <code>csms</code> and <code>chargepoint</code> APIs and the WebSocket transport with security profiles 1 to 3. The public API follows semantic versioning. OCPP 2.1 is planned.</div>
     </section>
 
     <section id="install">
@@ -621,7 +621,7 @@ fmt.Println(bad.Validate()) // ocpp: invalid field "connectorId": must be at lea
 
     <section id="v201">
       <h2>OCPP 2.0.1</h2>
-      <div class="note warn"><strong>In progress</strong>The messages and the high-level APIs are available. Runnable examples are in <a href="#examples">Runnable examples</a>. A device-model helper (the standardized component and variable names) is still to come, and the API may change before 1.0.</div>
+      <div class="note"><strong>Complete</strong>The messages and the high-level APIs are available, with <a href="#examples">runnable examples</a>. Not yet available: a device-model helper (the standardized component and variable names).</div>
       <p>All 64 messages of OCPP 2.0.1 are implemented as typed <code>...Request</code> and <code>...Response</code> structs, one package per functional block of the specification, plus <code>v201/types</code> for the shared types and enumerations. They are generated from the official JSON schemas, validated on send and receive, and tested against those schemas. <code>v201.NewRegistry()</code> registers them all.</p>
       <div class="tablewrap"><table>
         <tr><th>Block</th><th>Name</th><th>Package</th></tr>
@@ -975,7 +975,7 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
       <div class="tablewrap"><table>
         <tr><th>Constant</th><th>Value</th><th>Notes</th></tr>
         <tr><td><code>ocpp.V16</code></td><td><code>ocpp1.6</code></td><td>First target</td></tr>
-        <tr><td><code>ocpp.V201</code></td><td><code>ocpp2.0.1</code></td><td>In progress</td></tr>
+        <tr><td><code>ocpp.V201</code></td><td><code>ocpp2.0.1</code></td><td>Supported</td></tr>
         <tr><td><code>ocpp.V21</code></td><td><code>ocpp2.1</code></td><td>Later, optional</td></tr>
       </table></div>
       <div class="note"><strong>Spelling differs between versions</strong>OCPP 1.6 uses <code>FormationViolation</code> and <code>OccurenceConstraintViolation</code> (sic); 2.0.1 and 2.1 use <code>FormatViolation</code> and <code>OccurrenceConstraintViolation</code>, and add <code>MessageTypeNotSupported</code> and <code>RpcFrameworkError</code>. <code>ErrorCode.IsValid(version)</code> checks a code against the right set.</div>
@@ -993,11 +993,12 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>5</td><td>Remaining 1.6 profiles: firmware, local auth list, reservation, smart charging, remote trigger</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>6</td><td>Examples, docs, v0.1.0</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>7</td><td>OCPP 1.6 security extension</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>8</td><td>OCPP 2.0.1: messages, high-level APIs and examples done; release to come</td><td><span class="badge b-next">In progress</span></td></tr>
-        <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>8</td><td>OCPP 2.0.1: messages, high-level APIs, examples</td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>9</td><td>Hardening: fuzzing, benchmarks, load test, API review, v1.0.0</td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>10</td><td>OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
       </table></div>
       <h3>Supported messages</h3>
-      <p>All 28 OCPP 1.6 messages are supported; see the <a href="#messages">table above</a>.</p>
+      <p>All 28 OCPP 1.6 messages, the 11 of its security extension, and all 64 OCPP 2.0.1 messages are supported; see the <a href="#messages">1.6 table above</a> and the <a href="#v201">2.0.1 section</a>.</p>
     </section>
 
     <section id="contributing">

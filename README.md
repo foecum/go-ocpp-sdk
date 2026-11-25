@@ -6,11 +6,11 @@ A Go SDK for [OCPP](https://openchargealliance.org/protocols/open-charge-point-p
 (Open Charge Point Protocol), the protocol between EV charging stations and their
 central management system.
 
-**Status: pre-1.0.** OCPP 1.6J is complete: all 28 messages and the 11 of the
-security extension, both roles, WebSocket transport with security profiles 1 to 3.
-The API may still change before 1.0.
-OCPP 2.0.1 is in progress: all 64 messages and the high-level APIs exist (see
-[OCPP 2.0.1](#ocpp-201)), with runnable examples; the release is still to come. See the [roadmap](AGENTS.md#7-roadmap).
+**Status: v1.0.** OCPP 1.6J (all 28 messages and the 11 of the security extension)
+and OCPP 2.0.1 (all 64 messages) are complete for both roles, with WebSocket
+transport and security profiles 1 to 3. The public API follows semantic
+versioning. OCPP 2.1 is not implemented yet; see the [roadmap](AGENTS.md#7-roadmap)
+and the [changelog](CHANGELOG.md).
 
 - Both roles: charging station (`chargepoint`) and Central System / CSMS (`csms`).
 - OCPP-J (JSON over WebSocket) only; no SOAP.

@@ -272,7 +272,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Benchmarks for framing and a CSMS with many simulated charge points
 - [x] Load test example: 1,000 simulated charge points against one CSMS
 - [x] Review public API for consistency; write `CHANGELOG.md`  (review: docs/api-review.md)
-- [ ] Tag `v1.0.0` (ask owner first)
+- [x] Tag `v1.0.0` (ask owner first)
 
 ### Phase 10 — OCPP 2.1 (later, ask owner)
 - [ ] Plan only when the owner asks
@@ -321,6 +321,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Benchmarks (`ocppj`, `v16`, `v201`, `csms/v16`, `csms/v201`) have no CI thresholds; indicative results are kept in `docs/benchmarks.md`, labelled with the machine (approved by the owner).
 - 2026-11-25 — Load test (`examples/loadtest`): in-process CSMS plus N simulated stations over loopback WebSockets, for 1.6 and 2.0.1; reports operations/s and latency percentiles. A 20-station smoke test runs in the suite (skipped with `-short`); the 1,000-station run is manual.
 - 2026-11-25 — API review before v1.0.0 (owner approved the recommendations in `docs/api-review.md`): `ocppj.CallError` renamed `ocppj.CallErrorFrame` (so it no longer clashes with `ocpp.CallError`); `CSMS.ChargePoints()` renamed `CSMS.ChargePointIDs()` in `csms/v16` and `csms/v201`; the `Close()` exception to the context rule is recorded in section 4; everything else in the review is kept as is. A `ForEach` helper and the transaction-message retry helper stay additive post-1.0 candidates.
+- 2026-11-25 — `v1.0.0` tagged locally with the owner's OK, with the known gaps in section 9 still open (unenforced Part 2 field-table constraints, no appendices constants, no transaction-message retry helper). Not pushed: the owner pushes `main` and the tag after CI has run. From here the public API is stable: breaking changes need a new major version.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items

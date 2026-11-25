@@ -2,9 +2,13 @@
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is
-pre-1.0: the API may still change.
+stable from 1.0.0 on and follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-25
+
+First stable release. The public API follows semantic versioning from here.
 
 ### Added
 - Fuzz tests for OCPP-J framing, payload decoding of every 1.6 and 2.0.1 message,
@@ -16,7 +20,7 @@ pre-1.0: the API may still change.
 - `docs/api-review.md`: a review of the public API ahead of v1.0.0.
 
 ### Changed
-- **Breaking (pre-1.0):** `ocppj.CallError` is now `ocppj.CallErrorFrame`, and `csms.CSMS.ChargePoints()` is now `ChargePointIDs()` (`csms/v16` and `csms/v201`).
+- **Breaking:** `ocppj.CallError` is now `ocppj.CallErrorFrame`, and `csms.CSMS.ChargePoints()` is now `ChargePointIDs()` (`csms/v16` and `csms/v201`).
 - The `ChargePoint` types of `csms/v16`, `csms/v201`, `chargepoint/v16` and
   `chargepoint/v201` forward their methods explicitly; method sets are the same as
   in v0.1.0.
