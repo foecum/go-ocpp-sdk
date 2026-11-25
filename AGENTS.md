@@ -152,7 +152,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] `docs/spec/README.md` listing which spec files are expected there
 
 ### Phase 1 — Core (`ocpp`, `ocppj`)
-- [ ] `ocpp` package: `Request`, `Response`, `Feature` interfaces; version constants;
+- [x] `ocpp` package: `Request`, `Response`, `Feature` interfaces; version constants;
       shared error types
 - [ ] `ocppj`: parse/serialize CALL `[2, id, action, payload]`,
       CALLRESULT `[3, id, payload]`, CALLERROR `[4, id, code, description, details]`
@@ -160,7 +160,7 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [ ] Pending-request tracker: correlate responses by ID, per-request timeout,
       one outstanding CALL per direction per connection (spec rule), queue the rest
 - [ ] Feature registry: map action name → request/response types, per version
-- [ ] CALLERROR code sets for 1.6 and 2.0.1 (note spelling differences)
+- [x] CALLERROR code sets for 1.6 and 2.0.1 (note spelling differences)
 - [ ] Table-driven tests: valid frames, malformed JSON, wrong element types,
       unknown action, unknown message type, response with unknown ID, timeout
 
@@ -274,6 +274,9 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — `go` directive follows the installed toolchain (1.27.2).
 - 2026-11-25 — CI runs staticcheck via `go run honnef.co/go/tools/cmd/staticcheck@latest`, so no module dependency is added.
 - 2026-11-25 — Coverage floor of 95% per package plus full critical-path coverage, enforced by `scripts/coverage.sh` and CI — set by the owner.
+- 2026-11-25 — `ErrorCode` and the per-version code sets live in the root `ocpp` package (not `ocppj`) so `ocpp.CallError` can use them without an import cycle. OCPP 2.1 uses the 2.0.1 code set (checked against 2.1 OCPP-J table 8).
+- 2026-11-25 — Validation is hand-written `Validate()` methods on requests/responses, no validator dependency.
+- 2026-11-25 — Framing rules: unreadable message ID is answered with `-1` (2.0.1 OCPP-J 4.2.3); unknown message type gets `MessageTypeNotSupported` in 2.0.1/2.1 and is ignored in 1.6; a `null` payload is accepted and treated as `{}`.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
