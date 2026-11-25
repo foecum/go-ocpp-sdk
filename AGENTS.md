@@ -154,9 +154,9 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 ### Phase 1 — Core (`ocpp`, `ocppj`)
 - [x] `ocpp` package: `Request`, `Response`, `Feature` interfaces; version constants;
       shared error types
-- [ ] `ocppj`: parse/serialize CALL `[2, id, action, payload]`,
+- [x] `ocppj`: parse/serialize CALL `[2, id, action, payload]`,
       CALLRESULT `[3, id, payload]`, CALLERROR `[4, id, code, description, details]`
-- [ ] Unique message IDs (max 36 chars)
+- [x] Unique message IDs (max 36 chars)
 - [ ] Pending-request tracker: correlate responses by ID, per-request timeout,
       one outstanding CALL per direction per connection (spec rule), queue the rest
 - [ ] Feature registry: map action name → request/response types, per version
