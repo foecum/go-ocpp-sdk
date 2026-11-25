@@ -1,10 +1,12 @@
 package ocpp_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
 )
@@ -161,3 +163,57 @@ type pingRespValue struct{}
 
 func (pingRespValue) Action() string  { return "Ping" }
 func (pingRespValue) Validate() error { return nil }
+
+func TestDateTimeMarshal(t *testing.T) {
+	base := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	tests := []struct {
+		name string
+		in   time.Time
+		want string
+	}{
+		{"whole seconds", base, `"2026-01-02T03:04:05Z"`},
+		{"milliseconds", base.Add(123 * time.Millisecond), `"2026-01-02T03:04:05.123Z"`},
+		{"sub-millisecond is truncated", base.Add(123456789 * time.Nanosecond), `"2026-01-02T03:04:05.123Z"`},
+		{"converted to UTC", base.In(time.FixedZone("CET", 3600)), `"2026-01-02T03:04:05Z"`},
+	}
+	for _, tt := range tests {
+		got, err := json.Marshal(ocpp.NewDateTime(tt.in))
+		if err != nil || string(got) != tt.want {
+			t.Errorf("%s: got %s (%v), want %s", tt.name, got, err, tt.want)
+		}
+	}
+}
+
+func TestDateTimeUnmarshal(t *testing.T) {
+	want := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	good := map[string]time.Time{
+		`"2026-01-02T03:04:05Z"`:        want,
+		`"2026-01-02T03:04:05.5Z"`:      want.Add(500 * time.Millisecond),
+		`"2026-01-02T03:04:05.123456Z"`: want.Add(123456 * time.Microsecond),
+		`"2026-01-02T04:04:05+01:00"`:   want,
+		`"2026-01-02T03:04:05"`:         want, // no zone: UTC
+		`"2026-01-02T03:04:05.250"`:     want.Add(250 * time.Millisecond),
+	}
+	for in, w := range good {
+		var d ocpp.DateTime
+		if err := json.Unmarshal([]byte(in), &d); err != nil || !d.Equal(w) {
+			t.Errorf("%s: got %v (%v), want %v", in, d.Time, err, w)
+		}
+	}
+	for _, in := range []string{`"yesterday"`, `""`, `"2026-01-02"`, `12345`, `true`, `{}`} {
+		var d ocpp.DateTime
+		if err := json.Unmarshal([]byte(in), &d); err == nil {
+			t.Errorf("%s: expected an error", in)
+		}
+	}
+	d := ocpp.NewDateTime(want)
+	if err := json.Unmarshal([]byte(`null`), &d); err != nil || !d.Equal(want) {
+		t.Errorf("null: %v %v", d, err)
+	}
+	if p := ocpp.NewDateTime(want).Ptr(); !p.Equal(want) {
+		t.Error("Ptr")
+	}
+	if time.Since(ocpp.Now().Time) > time.Minute {
+		t.Error("Now is not now")
+	}
+}
