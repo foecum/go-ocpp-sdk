@@ -31,9 +31,14 @@ const (
 	CallResultType MessageType = 3
 	// CallErrorType is an error response.
 	CallErrorType MessageType = 4
+	// CallResultErrorType is an error answering a CALLRESULT (OCPP 2.1 only).
+	CallResultErrorType MessageType = 5
+	// SendType is an unconfirmed message without a response (OCPP 2.1 only).
+	SendType MessageType = 6
 )
 
-// Message is one OCPP-J frame: a Call, CallResult or CallErrorFrame.
+// Message is one OCPP-J frame: a Call, CallResult, CallErrorFrame and, in OCPP
+// 2.1, a Send or CallResultErrorFrame.
 type Message interface {
 	// Type returns the message type number.
 	Type() MessageType
@@ -61,6 +66,36 @@ type CallErrorFrame struct {
 	Description string
 	Details     json.RawMessage
 }
+
+// Send is an unconfirmed message frame, which OCPP 2.1 adds: [6, id, action,
+// payload]. The receiver never answers it.
+type Send struct {
+	UniqueID string
+	Action   string
+	Payload  json.RawMessage
+}
+
+// CallResultErrorFrame is the frame a receiver of a CALLRESULT sends when it
+// cannot process it, which OCPP 2.1 adds: [5, id, code, description, details].
+// Its ID is that of the CALLRESULT it answers.
+type CallResultErrorFrame struct {
+	UniqueID    string
+	Code        ocpp.ErrorCode
+	Description string
+	Details     json.RawMessage
+}
+
+// Type implements Message.
+func (Send) Type() MessageType { return SendType }
+
+// Type implements Message.
+func (CallResultErrorFrame) Type() MessageType { return CallResultErrorType }
+
+// ID implements Message.
+func (m Send) ID() string { return m.UniqueID }
+
+// ID implements Message.
+func (m CallResultErrorFrame) ID() string { return m.UniqueID }
 
 // Type implements Message.
 func (Call) Type() MessageType { return CallType }
@@ -92,6 +127,10 @@ type ParseError struct {
 	Code ocpp.ErrorCode
 	// Err is the underlying cause.
 	Err error
+
+	// silent is set for malformed frames that must never be answered: responses,
+	// and in OCPP 2.1 also SEND.
+	silent bool
 }
 
 // Error implements error.
@@ -102,11 +141,23 @@ func (e *ParseError) Unwrap() error { return e.Err }
 
 // ShouldReply reports whether the sender should be answered with a CALLERROR.
 // Malformed responses are never answered.
-func (e *ParseError) ShouldReply() bool {
-	return e.Code != "" && e.Type != CallResultType && e.Type != CallErrorType
+func (e *ParseError) ShouldReply() bool { return e.Code != "" && !e.silent }
+
+// quiet reports whether a malformed frame of type mt is never answered: a
+// response is not, and neither is a SEND or CALLRESULTERROR in OCPP 2.1.
+func quiet(v ocpp.Version, mt MessageType) bool {
+	switch mt {
+	case CallResultType, CallErrorType:
+		return true
+	case CallResultErrorType, SendType:
+		return v == ocpp.V21
+	}
+	return false
 }
 
-// Parse decodes one frame received on a connection speaking version v.
+// Parse decodes one frame received on a connection speaking version v. The
+// message types SEND and CALLRESULTERROR exist only in OCPP 2.1; for other
+// versions they are unknown message types.
 //
 // A payload of null is accepted and treated as an empty object. On failure the
 // error is a *ParseError.
@@ -124,10 +175,10 @@ func Parse(v ocpp.Version, data []byte) (Message, error) {
 	}
 	var id string
 	if err := json.Unmarshal(elems[1], &id); err != nil || id == "" || len(id) > MaxIDLength {
-		return nil, &ParseError{Type: mt, ID: UnknownID, Code: unreadableCode(v), Err: errors.New("message ID missing, not a string or too long")}
+		return nil, &ParseError{Type: mt, ID: UnknownID, Code: unreadableCode(v), Err: errors.New("message ID missing, not a string or too long"), silent: quiet(v, mt)}
 	}
 	fail := func(err error) (Message, error) {
-		return nil, &ParseError{Type: mt, ID: id, Code: ocpp.ProtocolError, Err: err}
+		return nil, &ParseError{Type: mt, ID: id, Code: ocpp.ProtocolError, Err: err, silent: quiet(v, mt)}
 	}
 	switch mt {
 	case CallType:
@@ -143,6 +194,22 @@ func Parse(v ocpp.Version, data []byte) (Message, error) {
 			return fail(err)
 		}
 		return &Call{UniqueID: id, Action: action, Payload: payload}, nil
+	case SendType:
+		if v != ocpp.V21 {
+			break
+		}
+		if len(elems) != 4 {
+			return fail(fmt.Errorf("SEND needs 4 elements, got %d", len(elems)))
+		}
+		var action string
+		if err := json.Unmarshal(elems[2], &action); err != nil || action == "" {
+			return fail(errors.New("SEND action missing or not a string"))
+		}
+		payload, err := object(elems[3])
+		if err != nil {
+			return fail(err)
+		}
+		return &Send{UniqueID: id, Action: action, Payload: payload}, nil
 	case CallResultType:
 		if len(elems) != 3 {
 			return fail(fmt.Errorf("CALLRESULT needs 3 elements, got %d", len(elems)))
@@ -153,7 +220,20 @@ func Parse(v ocpp.Version, data []byte) (Message, error) {
 		}
 		return &CallResult{UniqueID: id, Payload: payload}, nil
 	case CallErrorType:
-		return parseCallError(id, elems, fail)
+		code, desc, details, err := parseError("CALLERROR", elems)
+		if err != nil {
+			return fail(err)
+		}
+		return &CallErrorFrame{UniqueID: id, Code: code, Description: desc, Details: details}, nil
+	case CallResultErrorType:
+		if v != ocpp.V21 {
+			break
+		}
+		code, desc, details, err := parseError("CALLRESULTERROR", elems)
+		if err != nil {
+			return fail(err)
+		}
+		return &CallResultErrorFrame{UniqueID: id, Code: code, Description: desc, Details: details}, nil
 	}
 	pe := &ParseError{Type: mt, ID: id, Err: fmt.Errorf("unknown message type %d", mt)}
 	if v != ocpp.V16 {
@@ -162,22 +242,24 @@ func Parse(v ocpp.Version, data []byte) (Message, error) {
 	return nil, pe
 }
 
-func parseCallError(id string, elems []json.RawMessage, fail func(error) (Message, error)) (Message, error) {
+// parseError reads the code, description and details of a CALLERROR or
+// CALLRESULTERROR frame.
+func parseError(kind string, elems []json.RawMessage) (ocpp.ErrorCode, string, json.RawMessage, error) {
 	if len(elems) != 5 {
-		return fail(fmt.Errorf("CALLERROR needs 5 elements, got %d", len(elems)))
+		return "", "", nil, fmt.Errorf("%s needs 5 elements, got %d", kind, len(elems))
 	}
 	var code, desc string
 	if err := json.Unmarshal(elems[2], &code); err != nil || code == "" {
-		return fail(errors.New("CALLERROR code missing or not a string"))
+		return "", "", nil, fmt.Errorf("%s code missing or not a string", kind)
 	}
 	if err := json.Unmarshal(elems[3], &desc); err != nil {
-		return fail(errors.New("CALLERROR description is not a string"))
+		return "", "", nil, fmt.Errorf("%s description is not a string", kind)
 	}
 	details, err := object(elems[4])
 	if err != nil {
-		return fail(err)
+		return "", "", nil, err
 	}
-	return &CallErrorFrame{UniqueID: id, Code: ocpp.ErrorCode(code), Description: desc, Details: details}, nil
+	return ocpp.ErrorCode(code), desc, details, nil
 }
 
 func unreadableCode(v ocpp.Version) ocpp.ErrorCode {
@@ -221,16 +303,23 @@ func Marshal(m Message) ([]byte, error) {
 		}
 		frame = []any{CallResultType, m.UniqueID, payloadOrEmpty(m.Payload)}
 	case *CallErrorFrame:
+		var err error
+		if frame, err = errorFrame(CallErrorType, m.UniqueID, m.Code, m.Description, m.Details); err != nil {
+			return nil, err
+		}
+	case *CallResultErrorFrame:
+		var err error
+		if frame, err = errorFrame(CallResultErrorType, m.UniqueID, m.Code, m.Description, m.Details); err != nil {
+			return nil, err
+		}
+	case *Send:
 		if err := checkID(m.UniqueID); err != nil {
 			return nil, err
 		}
-		if m.Code == "" {
-			return nil, ocpp.Required("errorCode")
+		if m.Action == "" {
+			return nil, ocpp.Required("action")
 		}
-		if utf8.RuneCountInString(m.Description) > MaxDescriptionLength {
-			return nil, ocpp.Invalid("errorDescription", "longer than 255 characters")
-		}
-		frame = []any{CallErrorType, m.UniqueID, string(m.Code), m.Description, payloadOrEmpty(m.Details)}
+		frame = []any{SendType, m.UniqueID, m.Action, payloadOrEmpty(m.Payload)}
 	default:
 		return nil, fmt.Errorf("ocppj: cannot marshal %T", m)
 	}
@@ -239,6 +328,19 @@ func Marshal(m Message) ([]byte, error) {
 		return nil, fmt.Errorf("ocppj: marshal frame: %w", err)
 	}
 	return data, nil
+}
+
+func errorFrame(t MessageType, id string, code ocpp.ErrorCode, desc string, details json.RawMessage) ([]any, error) {
+	if err := checkID(id); err != nil {
+		return nil, err
+	}
+	if code == "" {
+		return nil, ocpp.Required("errorCode")
+	}
+	if utf8.RuneCountInString(desc) > MaxDescriptionLength {
+		return nil, ocpp.Invalid("errorDescription", "longer than 255 characters")
+	}
+	return []any{t, id, string(code), desc, payloadOrEmpty(details)}, nil
 }
 
 func checkID(id string) error {

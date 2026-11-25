@@ -94,6 +94,9 @@ func (r *Registry) DecodeResponse(action string, payload json.RawMessage) (ocpp.
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ocpp.ErrUnknownAction, action)
 	}
+	if ocpp.IsOneWay(f) {
+		return nil, fmt.Errorf("%w: %q is an unconfirmed message and has no response", ocpp.ErrUnknownAction, action)
+	}
 	v, err := r.decode(f.ResponseType(), payload)
 	if err != nil {
 		return nil, err

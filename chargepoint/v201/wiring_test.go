@@ -7,14 +7,14 @@ import (
 	"testing"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
-	"github.com/foecum/go-ocpp-sdk/internal/gen201"
+	"github.com/foecum/go-ocpp-sdk/internal/gen"
 	"github.com/foecum/go-ocpp-sdk/ocppj"
 	"github.com/foecum/go-ocpp-sdk/v201"
 )
 
 func handledByStation(action string) bool {
-	d := gen201.Directions[action]
-	return d == gen201.FromCSMS || d == gen201.Both
+	d := gen.Directions[action]
+	return d == gen.FromCSMS || d == gen.Both
 }
 
 func allUnimplemented() Config {
@@ -68,14 +68,14 @@ func TestDispatchAnswersNotSupportedWithoutAnImplementation(t *testing.T) {
 func TestHandlerInterfacesMatchTheDirections(t *testing.T) {
 	cfg := reflect.TypeOf(Config{})
 	seen := map[string]bool{}
-	for _, b := range gen201.Blocks {
+	for _, b := range gen.Blocks {
 		var want []string
 		for _, m := range b.Messages {
 			if handledByStation(m) {
 				want = append(want, m)
 			}
 		}
-		field, ok := cfg.FieldByName(gen201.HandlerNames[b.Pkg])
+		field, ok := cfg.FieldByName(gen.HandlerNames[b.Pkg])
 		if len(want) == 0 {
 			if ok {
 				t.Errorf("block %s has no messages for the station to handle but Config has a field for it", b.Pkg)
@@ -111,8 +111,8 @@ func TestEveryCallMethodFailsWhileDisconnected(t *testing.T) {
 	c := newStation(t, Config{})
 	called := 0
 	for _, f := range v201.Features() {
-		d := gen201.Directions[f.Action()]
-		if d != gen201.FromStation && d != gen201.Both {
+		d := gen.Directions[f.Action()]
+		if d != gen.FromStation && d != gen.Both {
 			continue
 		}
 		m := reflect.ValueOf(c).MethodByName(f.Action())

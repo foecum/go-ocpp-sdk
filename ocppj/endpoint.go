@@ -26,6 +26,11 @@ const (
 // call Endpoint.Call.
 type RequestHandler func(ctx context.Context, req ocpp.Request) (ocpp.Response, error)
 
+// SendHandler handles an incoming SEND, an unconfirmed message of OCPP 2.1.
+// Nothing is sent back whatever it returns; an error is only logged. It runs in
+// its own goroutine.
+type SendHandler func(ctx context.Context, msg ocpp.Request) error
+
 // Config configures an Endpoint.
 type Config struct {
 	// Registry is required and decides the OCPP version.
@@ -36,6 +41,13 @@ type Config struct {
 	// Handler handles incoming CALLs. If nil, every CALL is answered with
 	// NotImplemented.
 	Handler RequestHandler
+	// SendHandler handles incoming SEND messages (OCPP 2.1). If nil, they are
+	// logged and dropped.
+	SendHandler SendHandler
+	// ResultErrorHandler is told about CALLRESULTERROR frames (OCPP 2.1), with
+	// which the peer reports that it could not process a CALLRESULT of ours. If
+	// nil, they are only logged.
+	ResultErrorHandler func(*CallResultErrorFrame)
 	// IDGenerator creates message IDs. Default: NewUUIDGenerator.
 	IDGenerator IDGenerator
 	// Timeout is the per-call response timeout, counted from when the CALL is
@@ -77,6 +89,8 @@ type Endpoint struct {
 	reg      *Registry
 	send     func(context.Context, []byte) error
 	handler  RequestHandler
+	sendH    SendHandler
+	resultH  func(*CallResultErrorFrame)
 	ids      IDGenerator
 	timeout  time.Duration
 	maxQueue int
@@ -98,7 +112,7 @@ func NewEndpoint(cfg Config) (*Endpoint, error) {
 		return nil, errors.New("ocppj: Config needs a Registry and a Send function")
 	}
 	e := &Endpoint{
-		reg: cfg.Registry, send: cfg.Send, handler: cfg.Handler, ids: cfg.IDGenerator,
+		reg: cfg.Registry, send: cfg.Send, handler: cfg.Handler, sendH: cfg.SendHandler, resultH: cfg.ResultErrorHandler, ids: cfg.IDGenerator,
 		timeout: cfg.Timeout, maxQueue: cfg.QueueSize, log: cfg.Logger,
 	}
 	if e.ids == nil {
@@ -133,8 +147,12 @@ func (e *Endpoint) Call(ctx context.Context, req ocpp.Request) (ocpp.Response, e
 	if req == nil {
 		return nil, ocpp.Required("request")
 	}
-	if _, ok := e.reg.Lookup(req.Action()); !ok {
+	f, ok := e.reg.Lookup(req.Action())
+	if !ok {
 		return nil, fmt.Errorf("%w: %q", ocpp.ErrUnknownAction, req.Action())
+	}
+	if ocpp.IsOneWay(f) {
+		return nil, fmt.Errorf("%w: %q is an unconfirmed message, use Send", ocpp.ErrUnknownAction, req.Action())
 	}
 	if err := req.Validate(); err != nil {
 		return nil, err
@@ -168,6 +186,46 @@ func (e *Endpoint) Call(ctx context.Context, req ocpp.Request) (ocpp.Response, e
 		e.abandon(p)
 		return nil, ctx.Err()
 	}
+}
+
+// Send sends msg as an unconfirmed SEND frame (OCPP 2.1) and returns once it
+// is written. A SEND is not queued behind CALLs and does not wait for any
+// answer: the spec lets a SEND go out while a CALL is outstanding. It returns
+// an error matching ocpp.ErrValidation if msg is invalid, ocpp.ErrUnknownAction
+// if its action is unknown or is not an unconfirmed message, ocpp.ErrClosed if
+// the endpoint is closed, or the transport's error.
+func (e *Endpoint) Send(ctx context.Context, msg ocpp.Request) error {
+	if msg == nil {
+		return ocpp.Required("message")
+	}
+	f, ok := e.reg.Lookup(msg.Action())
+	if !ok {
+		return fmt.Errorf("%w: %q", ocpp.ErrUnknownAction, msg.Action())
+	}
+	if !ocpp.IsOneWay(f) {
+		return fmt.Errorf("%w: %q is not an unconfirmed message, use Call", ocpp.ErrUnknownAction, msg.Action())
+	}
+	if err := msg.Validate(); err != nil {
+		return err
+	}
+	payload, err := marshalPayload(msg)
+	if err != nil {
+		return err
+	}
+	frame, err := Marshal(&Send{UniqueID: e.ids.NewID(), Action: msg.Action(), Payload: payload})
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	closed := e.closed
+	e.mu.Unlock()
+	if closed {
+		return ocpp.ErrClosed
+	}
+	if err := e.send(ctx, frame); err != nil {
+		return fmt.Errorf("ocppj: send %s: %w", msg.Action(), err)
+	}
+	return nil
 }
 
 // pump sends queued calls while no call is outstanding.
@@ -269,10 +327,28 @@ func (e *Endpoint) HandleFrame(data []byte) {
 			defer e.wg.Done()
 			e.serve(m)
 		}()
+	case *Send:
+		e.mu.Lock()
+		if e.closed {
+			e.mu.Unlock()
+			return
+		}
+		e.wg.Add(1)
+		e.mu.Unlock()
+		go func() {
+			defer e.wg.Done()
+			e.serveSend(m)
+		}()
+	case *CallResultErrorFrame:
+		e.log.Warn("ocppj: peer could not process our response", "id", m.UniqueID, "code", m.Code, "description", m.Description)
+		if e.resultH != nil {
+			e.resultH(m)
+		}
 	case *CallResult:
 		e.complete(m.UniqueID, func(p *pending) (ocpp.Response, error) {
 			resp, err := e.reg.DecodeResponse(p.action, m.Payload)
 			if err != nil {
+				e.rejectResult(m.UniqueID, err)
 				return nil, fmt.Errorf("ocppj: %s response: %w", p.action, err)
 			}
 			return resp, nil
@@ -302,8 +378,43 @@ func (e *Endpoint) complete(id string, result func(*pending) (ocpp.Response, err
 	e.pump()
 }
 
+// rejectResult answers a CALLRESULT we could not decode with a CALLRESULTERROR,
+// which only exists in OCPP 2.1.
+func (e *Endpoint) rejectResult(id string, err error) {
+	if e.reg.Version() != ocpp.V21 {
+		return
+	}
+	f := e.errorFrame(id, err)
+	e.reply(&CallResultErrorFrame{UniqueID: f.UniqueID, Code: f.Code, Description: f.Description, Details: f.Details})
+}
+
+// serveSend decodes an incoming SEND and gives it to the handler. Nothing is
+// ever sent back.
+func (e *Endpoint) serveSend(s *Send) {
+	if f, ok := e.reg.Lookup(s.Action); ok && !ocpp.IsOneWay(f) {
+		e.log.Warn("ocppj: dropping SEND of a message that needs a response", "action", s.Action)
+		return
+	}
+	msg, err := e.reg.DecodeRequest(s.Action, s.Payload)
+	if err != nil {
+		e.log.Warn("ocppj: dropping invalid SEND", "action", s.Action, "err", err)
+		return
+	}
+	if e.sendH == nil {
+		e.log.Warn("ocppj: dropping SEND, no handler", "action", s.Action)
+		return
+	}
+	if err := e.sendH(e.baseCtx, msg); err != nil {
+		e.log.Warn("ocppj: SEND handler failed", "action", s.Action, "err", err)
+	}
+}
+
 // serve runs the handler for an incoming CALL and sends the reply.
 func (e *Endpoint) serve(c *Call) {
+	if f, ok := e.reg.Lookup(c.Action); ok && ocpp.IsOneWay(f) {
+		e.reply(&CallErrorFrame{UniqueID: c.UniqueID, Code: ocpp.ProtocolError, Description: c.Action + " is an unconfirmed message and must be sent as SEND"})
+		return
+	}
 	req, err := e.reg.DecodeRequest(c.Action, c.Payload)
 	if err != nil {
 		e.reply(e.errorFrame(c.UniqueID, err))
@@ -360,8 +471,11 @@ func truncate(s string) string {
 
 // reply sends a CALLRESULT or CALLERROR; failures are logged.
 func (e *Endpoint) reply(m Message) {
-	if ce, ok := m.(*CallErrorFrame); ok {
-		ce.Description = truncate(ce.Description)
+	switch f := m.(type) {
+	case *CallErrorFrame:
+		f.Description = truncate(f.Description)
+	case *CallResultErrorFrame:
+		f.Description = truncate(f.Description)
 	}
 	frame, err := Marshal(m)
 	if err == nil {

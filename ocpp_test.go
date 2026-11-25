@@ -217,3 +217,31 @@ func TestDateTimeUnmarshal(t *testing.T) {
 		t.Error("Now is not now")
 	}
 }
+
+func TestNewSendFeature(t *testing.T) {
+	f, err := ocpp.NewSendFeature(&pingReq{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Action() != "Ping" || f.RequestType() != reflect.TypeOf(pingReq{}) || f.ResponseType() != nil || !ocpp.IsOneWay(f) {
+		t.Errorf("unexpected one-way feature %v %v %v", f.Action(), f.RequestType(), f.ResponseType())
+	}
+	if _, err := ocpp.NewSendFeature(nil); err == nil {
+		t.Error("nil request: expected an error")
+	}
+	if _, err := ocpp.NewSendFeature(noActionReq{}); err == nil {
+		t.Error("empty action: expected an error")
+	}
+	two, _ := ocpp.NewFeature(pingReq{}, &pingResp{})
+	if ocpp.IsOneWay(two) {
+		t.Error("a request/response feature is not one-way")
+	}
+}
+
+type foreignFeature struct{ ocpp.Feature }
+
+func TestIsOneWayIgnoresForeignFeatures(t *testing.T) {
+	if ocpp.IsOneWay(foreignFeature{}) {
+		t.Error("a feature without the OneWay method is not one-way")
+	}
+}

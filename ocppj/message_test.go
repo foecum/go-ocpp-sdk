@@ -89,7 +89,7 @@ func TestParseErrors(t *testing.T) {
 		{"error description not string", ocpp.V201, `[4,"1","X",7,{}]`, CallErrorType, "1", ocpp.ProtocolError, false},
 		{"error details bad", ocpp.V201, `[4,"1","X","d","x"]`, CallErrorType, "1", ocpp.ProtocolError, false},
 		{"unknown type 2.0.1", ocpp.V201, `[9,"1","A",{}]`, 9, "1", ocpp.MessageTypeNotSupported, true},
-		{"unknown type 2.1", ocpp.V21, `[5,"1"]`, 5, "1", ocpp.MessageTypeNotSupported, true},
+		{"unknown type 2.1", ocpp.V21, `[7,"1"]`, 7, "1", ocpp.MessageTypeNotSupported, true},
 		{"unknown type 1.6 ignored", ocpp.V16, `[9,"1","A",{}]`, 9, "1", "", false},
 	}
 	for _, tt := range tests {

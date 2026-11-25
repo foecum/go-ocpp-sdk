@@ -12,7 +12,7 @@ import (
 	"github.com/coder/websocket"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
-	"github.com/foecum/go-ocpp-sdk/internal/gen201"
+	"github.com/foecum/go-ocpp-sdk/internal/gen"
 	"github.com/foecum/go-ocpp-sdk/v201"
 )
 
@@ -22,8 +22,8 @@ func allFeatures(t *testing.T) []ocpp.Feature {
 }
 
 func handledByCSMS(action string) bool {
-	d := gen201.Directions[action]
-	return d == gen201.FromStation || d == gen201.Both
+	d := gen.Directions[action]
+	return d == gen.FromStation || d == gen.Both
 }
 
 // allUnimplemented is a Config with the Unimplemented handler of every block.
@@ -74,14 +74,14 @@ func TestDispatchAnswersNotSupportedWithoutAnImplementation(t *testing.T) {
 func TestHandlerInterfacesMatchTheDirections(t *testing.T) {
 	cfg := reflect.TypeOf(Config{})
 	seen := map[string]bool{}
-	for _, b := range gen201.Blocks {
+	for _, b := range gen.Blocks {
 		var want []string
 		for _, m := range b.Messages {
 			if handledByCSMS(m) {
 				want = append(want, m)
 			}
 		}
-		field, ok := cfg.FieldByName(gen201.HandlerNames[b.Pkg])
+		field, ok := cfg.FieldByName(gen.HandlerNames[b.Pkg])
 		if len(want) == 0 {
 			if ok {
 				t.Errorf("block %s has no messages for the CSMS to handle but Config has a field for it", b.Pkg)
@@ -148,7 +148,7 @@ func TestEveryCallMethodReachesTheEndpoint(t *testing.T) {
 	called := 0
 	cpv := reflect.ValueOf(cp)
 	for _, f := range allFeatures(t) {
-		if handledByCSMS(f.Action()) && gen201.Directions[f.Action()] != gen201.Both {
+		if handledByCSMS(f.Action()) && gen.Directions[f.Action()] != gen.Both {
 			continue
 		}
 		m := cpv.MethodByName(f.Action())
