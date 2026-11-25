@@ -32,7 +32,7 @@ func main() {
 	var opts options
 	flag.IntVar(&opts.stations, "stations", 1000, "number of simulated charging stations")
 	flag.DurationVar(&opts.duration, "duration", 30*time.Second, "how long to run after all stations are connected")
-	flag.StringVar(&opts.version, "version", "1.6", "OCPP version: 1.6 or 2.0.1")
+	flag.StringVar(&opts.version, "version", "1.6", "OCPP version: 1.6, 2.0.1 or 2.1")
 	flag.DurationVar(&opts.heartbeat, "heartbeat", time.Second, "interval between heartbeats of each station")
 	flag.DurationVar(&opts.session, "session-every", 5*time.Second, "interval between charging sessions of each station (0 disables them)")
 	flag.Parse()
@@ -79,8 +79,10 @@ func factoryFor(version string) (factory, error) {
 		return factory16(), nil
 	case "2.0.1":
 		return factory201(), nil
+	case "2.1":
+		return factory21(), nil
 	}
-	return factory{}, fmt.Errorf("unknown version %q: use 1.6 or 2.0.1", version)
+	return factory{}, fmt.Errorf("unknown version %q: use 1.6, 2.0.1 or 2.1", version)
 }
 
 // stats collects the latency of every call and the errors.

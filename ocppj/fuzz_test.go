@@ -17,6 +17,10 @@ var frameSeeds = []string{
 	`[4,"1","FormationViolation","bad",{"a":1}]`,
 	`[2,"1","Ping"]`,
 	`[9,"1","Ping",{}]`,
+	`[6,"1","Stream",{"id":1}]`,
+	`[6,"1","Stream"]`,
+	`[5,"1","FormatViolation","bad",{}]`,
+	`[5,"1","FormatViolation"]`,
 	`[2,1,"Ping",{}]`,
 	`["2","1","Ping",{}]`,
 	`[]`, `{}`, `null`, `[2`, ``, `[2,"` + string(bytes.Repeat([]byte("x"), 40)) + `","Ping",{}]`,
@@ -30,7 +34,7 @@ func FuzzParse(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		for _, v := range []ocpp.Version{ocpp.V16, ocpp.V201} {
+		for _, v := range []ocpp.Version{ocpp.V16, ocpp.V201, ocpp.V21} {
 			m, err := Parse(v, []byte(s))
 			if err != nil {
 				continue
@@ -75,8 +79,9 @@ func FuzzEndpointHandleFrame(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string) {
 		sent := make(chan []byte, 16)
 		e, err := NewEndpoint(Config{
-			Registry: newRegistry(t, ocpp.V201),
+			Registry: newRegistry21(t),
 			Timeout:  50 * time.Millisecond,
+			SendHandler: func(context.Context, ocpp.Request) error { return nil },
 			Send: func(_ context.Context, frame []byte) error {
 				select {
 				case sent <- frame:
@@ -95,7 +100,7 @@ func FuzzEndpointHandleFrame(f *testing.F) {
 		e.HandleFrame([]byte(s))
 		select {
 		case frame := <-sent:
-			if _, err := Parse(ocpp.V201, frame); err != nil {
+			if _, err := Parse(ocpp.V21, frame); err != nil {
 				t.Fatalf("input %q made the endpoint send an invalid frame %q: %v", s, frame, err)
 			}
 		case <-time.After(5 * time.Millisecond):

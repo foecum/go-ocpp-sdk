@@ -14,7 +14,7 @@ func TestSmallRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs a CSMS and simulated stations")
 	}
-	for _, version := range []string{"1.6", "2.0.1"} {
+	for _, version := range []string{"1.6", "2.0.1", "2.1"} {
 		t.Run(version, func(t *testing.T) {
 			var out bytes.Buffer
 			err := run(context.Background(), options{

@@ -23,6 +23,7 @@ jobs:
           - { pkg: ., name: FuzzDateTime }
           - { pkg: ./v16, name: FuzzDecode }
           - { pkg: ./v201, name: FuzzDecode }
+          - { pkg: ./v21, name: FuzzDecode }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
