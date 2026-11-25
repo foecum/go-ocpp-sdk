@@ -7,7 +7,7 @@
 //	ep, err := ocppj.NewEndpoint(ocppj.Config{Registry: reg, Send: conn.Write})
 //
 // The messages themselves live in subpackages by profile (core, firmware,
-// localauth, remotetrigger, reservation and smartcharging); shared types and
+// localauth, remotetrigger, reservation, security and smartcharging); shared types and
 // enumerations live in package types.
 package v16
 
@@ -21,6 +21,7 @@ import (
 	"github.com/foecum/go-ocpp-sdk/v16/localauth"
 	"github.com/foecum/go-ocpp-sdk/v16/remotetrigger"
 	"github.com/foecum/go-ocpp-sdk/v16/reservation"
+	"github.com/foecum/go-ocpp-sdk/v16/security"
 	"github.com/foecum/go-ocpp-sdk/v16/smartcharging"
 )
 
@@ -33,6 +34,7 @@ func Features() []ocpp.Feature {
 		localauth.Features(),
 		remotetrigger.Features(),
 		reservation.Features(),
+		security.Features(),
 		smartcharging.Features(),
 	} {
 		all = append(all, profile...)

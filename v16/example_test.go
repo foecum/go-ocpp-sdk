@@ -14,5 +14,5 @@ func ExampleNewRegistry() {
 	}
 	f, _ := reg.Lookup("BootNotification")
 	fmt.Println(reg.Version(), reg.Len(), f.RequestType().Name())
-	// Output: ocpp1.6 28 BootNotificationRequest
+	// Output: ocpp1.6 39 BootNotificationRequest
 }

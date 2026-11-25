@@ -17,11 +17,12 @@ func TestNewRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reg.Version() != ocpp.V16 || reg.Len() != len(v16.Features()) || reg.Len() != 28 {
+	if reg.Version() != ocpp.V16 || reg.Len() != len(v16.Features()) || reg.Len() != 39 {
 		t.Errorf("version %s, %d actions", reg.Version(), reg.Len())
 	}
 	for _, action := range []string{"Authorize", "BootNotification", "StartTransaction", "StopTransaction", "UnlockConnector",
-		"GetDiagnostics", "UpdateFirmware", "SendLocalList", "ReserveNow", "SetChargingProfile", "GetCompositeSchedule", "TriggerMessage"} {
+		"GetDiagnostics", "UpdateFirmware", "SendLocalList", "ReserveNow", "SetChargingProfile", "GetCompositeSchedule", "TriggerMessage",
+		"SignCertificate", "CertificateSigned", "SecurityEventNotification", "ExtendedTriggerMessage", "GetLog", "SignedUpdateFirmware"} {
 		if _, ok := reg.Lookup(action); !ok {
 			t.Errorf("%s is not registered", action)
 		}
