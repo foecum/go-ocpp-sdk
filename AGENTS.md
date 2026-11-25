@@ -219,10 +219,10 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Wire all profiles into `chargepoint/v16` and `csms/v16`; tests for each
 
 ### Phase 6 — 1.6 examples and docs
-- [ ] `examples/v16/csms` and `examples/v16/chargepoint` that talk to each other
-- [ ] README: install, quick start for both roles, supported messages table,
+- [x] `examples/v16/csms` and `examples/v16/chargepoint` that talk to each other
+- [x] README: install, quick start for both roles, supported messages table,
       security profiles, logging, error handling
-- [ ] Package docs with examples (`Example...` test functions)
+- [x] Package docs with examples (`Example...` test functions)
 - [ ] Tag `v0.1.0` (ask owner first)
 
 ### Phase 7 — OCPP 1.6 security extension (optional, ask owner)
@@ -296,6 +296,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Shared helpers for the two packages live in `internal/rpc`. Construction seams (`newRegistry`, `newEndpoint`, `newWSServer`) are package variables that tests replace to reach error paths that cannot occur otherwise.
 - 2026-11-25 — Remaining 1.6 profiles: one package per profile (`firmware`, `localauth`, `reservation`, `smartcharging`, `remotetrigger`), each with `Features()`; `v16.NewRegistry()` registers all 28 messages. `GetDiagnostics`/`UpdateFirmware` locations must be absolute URIs (the schemas' `uri` format). Rules from the spec text enforced beyond the schemas: `SendLocalList` idTags unique (case-insensitive) and `idTagInfo` present on every entry of a Full update; `GetLocalListVersion` returns ≥ -1; `TriggerMessage.connectorId` > 0 when present; connector ids ≥ 0 for ReserveNow, SetChargingProfile, ClearChargingProfile and GetCompositeSchedule. `SendLocalList.listVersion` is not constrained (the spec states no limit).
 - 2026-11-25 — Handler wiring for those profiles follows the approved Phase 4 shape: one optional `Config` field per profile (`csms.Config.Firmware`; `chargepoint.Config.Firmware/LocalAuth/Reservation/SmartCharging/RemoteTrigger`), a nil one answers `NotSupported`. Profiles whose messages only flow from the Central System need no CSMS-side handler. Shared test helpers live in `internal/schematest`; profile `Features()` are built with `internal/featureset`.
+- 2026-11-25 — Examples (approved by the owner): plain `ws://` with optional Basic auth, no TLS flags (the README shows the TLS setup). Each example is a thin `main` over `run(ctx, ...)`; `examples/v16/smoke_test.go` builds both and runs them against each other (skipped with `-short`). Every package has tested `Example` functions with `// Output:` checks. The `v0.1.0` tag is made only with the owner's OK, preferably after pushing and seeing CI and Pages succeed.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items

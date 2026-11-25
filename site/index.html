@@ -186,7 +186,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
 <div class="hero" id="top">
   <div class="hero-inner">
     <div>
-      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 5 of 10 complete</span>
+      <span class="pill"><span class="dot"></span> Pre-1.0 · OCPP 1.6J complete</span>
       <h1>Talk <em>OCPP</em> from Go.</h1>
       <p class="lead">An SDK for the Open Charge Point Protocol, the language EV charging stations speak to their central system. Both roles, JSON over WebSocket, built on the standard library.</p>
       <div class="cta">
@@ -227,6 +227,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
     <a href="#concepts">Core concepts</a>
     <a href="#quickstart">Quick start</a>
     <a href="#highlevel">Central System &amp; Charge Point</a>
+    <a href="#examples">Runnable examples</a>
     <a href="#messages">OCPP 1.6 messages</a>
     <a href="#transport">WebSocket transport</a>
     <a href="#frames">Working with frames</a>
@@ -246,7 +247,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-alpha</strong>The protocol core (<code>ocpp</code>, <code>ocppj</code>), the WebSocket transport (<code>ws</code>), all 28 OCPP 1.6 messages (<code>v16</code>) and the high-level <code>csms</code> and <code>chargepoint</code> APIs exist and are described below. Ready-made examples, OCPP 2.0.1 and a tagged release are still to come, and the API may still change.</div>
+      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is next.</div>
     </section>
 
     <section id="install">
@@ -480,12 +481,39 @@ conf, err := cp.SetChargingProfile(ctx, smartcharging.SetChargingProfileRequest{
 		},
 	},
 })</code></pre></div>
+      <h3>Logging</h3>
+      <p>Both <code>csms.Config</code> and <code>chargepoint.Config</code> take a <code>*slog.Logger</code>; the default discards everything.</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">logger := slog.New(slog.NewJSONHandler(os.Stderr, &amp;slog.HandlerOptions{Level: slog.LevelDebug}))
+srv, err := csms.New(csms.Config{Logger: logger})</code></pre></div>
       <h3>When the connection is down</h3>
       <ul>
         <li>A call made while disconnected fails at once with an error matching <code>ocpp.ErrNotConnected</code>. Nothing is queued or retried for you.</li>
         <li>A call that was waiting for its answer when the connection dropped also returns <code>ocpp.ErrNotConnected</code> straight away, not after the timeout. The other side may or may not have processed it, so only resend what is safe to repeat.</li>
         <li>OCPP 1.6 requires a station to keep and retry transaction messages (<code>StartTransaction</code>, <code>StopTransaction</code>, <code>MeterValues</code>). Build that on <code>Connected()</code> and <code>WaitConnected()</code>; a ready-made opt-in retry helper is planned.</li>
         <li>The station reconnects by itself using the back-off from the WebSocket section: <code>Reconnect: ws.Reconnect{WaitMinimum: …, RandomRange: …, RepeatTimes: …}</code>, or leave it zero for the defaults.</li>
+      </ul>
+    </section>
+
+    <section id="examples">
+      <h2>Runnable examples</h2>
+      <p>Two programs in <code>examples/v16</code> talk to each other: a Central System and a simulated charging station. Start the Central System in one terminal:</p>
+      <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go run ./examples/v16/csms -addr :8080</code></pre></div>
+      <p>and the station in another:</p>
+      <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go run ./examples/v16/chargepoint -id CS001</code></pre></div>
+      <p>The station boots, sends heartbeats at the interval the Central System returns, and runs charging sessions: authorize, start a transaction, report meter values, stop. The Central System logs everything and calls the station back with <code>GetConfiguration</code>. Its log looks like this (trimmed):</p>
+      <div class="code"><div class="code-head"><span>output</span><button class="copy">Copy</button></div><pre><code class="lang-sh">listening on 127.0.0.1:8080
+level=INFO msg="charge point connected" id=CS001 addr=127.0.0.1:46188
+level=INFO msg="boot notification" id=CS001 vendor=Example model=Simulator firmware=1.0.0
+level=INFO msg=configuration id=CS001 keys=2
+level=INFO msg=authorize id=CS001 idTag=04A1B2C3D4 status=Accepted
+level=INFO msg="start transaction" id=CS001 connector=1 idTag=04A1B2C3D4 meterStart=0 transaction=1 status=Accepted
+level=INFO msg="meter value" id=CS001 connector=1 value=500 unit=Wh
+level=INFO msg="stop transaction" id=CS001 transaction=1 meterStop=1000 reason=Local</code></pre></div>
+      <ul>
+        <li>Both programs take <code>-password</code> for HTTP Basic authentication. The Central System also takes <code>-tags</code> (the idTags it accepts) and <code>-interval</code>; the station takes <code>-sessions</code>, <code>-session-length</code>, <code>-meter-every</code>, <code>-idle</code> and <code>-url</code>.</li>
+        <li>The station answers <code>RemoteStartTransaction</code>, <code>RemoteStopTransaction</code>, <code>Reset</code>, <code>ChangeConfiguration</code>, <code>GetConfiguration</code>, <code>UnlockConnector</code> and <code>TriggerMessage</code>, and keeps working across connection drops, resending transaction messages once it has reconnected.</li>
+        <li>The test suite builds both programs and runs them against each other, so they cannot drift from the library.</li>
+        <li>Every package also has tested <code>Example</code> functions on <a href="https://pkg.go.dev/github.com/foecum/go-ocpp-sdk">pkg.go.dev</a>.</li>
       </ul>
     </section>
 
@@ -841,7 +869,7 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>3</td><td>OCPP 1.6 types and Core profile messages</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>4</td><td>High-level <code>chargepoint/v16</code> and <code>csms/v16</code></td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>5</td><td>Remaining 1.6 profiles: firmware, local auth list, reservation, smart charging, remote trigger</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>6</td><td>Examples, docs, v0.1.0</td><td><span class="badge b-next">Next</span></td></tr>
+        <tr><td>6</td><td>Examples, docs, v0.1.0</td><td><span class="badge b-next">Release pending</span></td></tr>
         <tr><td>7–8</td><td>1.6 security extension, OCPP 2.0.1</td><td><span class="badge b-plan">Planned</span></td></tr>
         <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
       </table></div>
