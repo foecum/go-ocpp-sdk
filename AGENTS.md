@@ -169,16 +169,16 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
       unknown action, unknown message type, response with unknown ID, timeout
 
 ### Phase 2 — Transport (`ws`)
-- [ ] Pick the WebSocket library (`github.com/coder/websocket` vs
+- [x] Pick the WebSocket library (`github.com/coder/websocket` vs
       `github.com/gorilla/websocket`) and record why in Decisions
-- [ ] Server: charge point ID from the last URL path segment; connection
+- [x] Server: charge point ID from the last URL path segment; connection
       registry; connect/disconnect callbacks
-- [ ] Subprotocol negotiation (`ocpp1.6`, `ocpp2.0.1`); reject if none match
+- [x] Subprotocol negotiation (`ocpp1.6`, `ocpp2.0.1`); reject if none match
 - [ ] Client: connect, auto-reconnect with exponential backoff + jitter
 - [ ] Ping/pong keep-alive with configurable interval
-- [ ] Security profile 1: HTTP Basic Auth (charge point ID as username)
-- [ ] Security profile 2: TLS + Basic Auth
-- [ ] Security profile 3: TLS with client certificates (mTLS)
+- [x] Security profile 1: HTTP Basic Auth (charge point ID as username)
+- [x] Security profile 2: TLS + Basic Auth
+- [x] Security profile 3: TLS with client certificates (mTLS)
 - [ ] Graceful shutdown for server and client
 - [ ] Tests: handshake, subprotocol mismatch, auth failure, reconnect,
       concurrent connections
@@ -283,6 +283,8 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Framing rules: unreadable message ID is answered with `-1` (2.0.1 OCPP-J 4.2.3); unknown message type gets `MessageTypeNotSupported` in 2.0.1/2.1 and is ignored in 1.6; a `null` payload is accepted and treated as `{}`.
 - 2026-11-25 — `ocppj.Endpoint` is transport-agnostic (the transport passes a `Send` func and feeds `HandleFrame`). Defaults: 30s response timeout counted from send, 1000-call bounded queue. A caller whose context ends frees the outstanding slot (treated like a timeout) so the queue keeps moving; late responses are dropped. Incoming CALLs run in their own goroutine so handlers may call back into the peer.
 - 2026-11-25 — Documentation is a self-contained static site in `site/`, deployed to GitHub Pages by `.github/workflows/pages.yml` (only `site/` is published, never `docs/spec/`). Updating it is part of every change that affects users (section 10) — set by the owner.
+- 2026-11-25 — WebSocket library: `github.com/coder/websocket` (v1.8.15). Reasons: actively maintained (gorilla's last release was June 2024), context-aware reads/writes/pings/dials (our convention: `context.Context` first), safe concurrent writes (gorilla needs a manual write mutex), standard-library-only dependencies, built-in `Subprotocols` negotiation. Approved by the owner.
+- 2026-11-25 — Transport decisions: `ws.Server` is an `http.Handler`; version is chosen by the server's preference order among the client's offered subprotocols; a subprotocol mismatch completes the handshake without a subprotocol and then closes with 1002 (OCPP-J §3.2, same text in 1.6 and 2.0.1); a duplicate connection for the same ID replaces the old one (closed with 1008); ID rules: ≤48 chars, no `:` or `/`; unknown ID → 404, bad credentials → 401, failed certificate identity → 403; TLS ≥1.2 with the spec's GCM suites (plus ECDHE-RSA GCM); profile 3 requires subject CN == charge point ID and optionally O containing the operator name (A00.FR.404/405/511); WebSocket compression disabled; binary frames rejected; defaults: ping 30s, pong timeout 10s, read limit 1 MiB.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
@@ -290,6 +292,7 @@ Record each decision as: date — decision — reason.
 List anything not implemented or simplified, with a reason.
 
 - (none yet)
+- 1.6 security profiles: the OCPP 1.6 security whitepaper is not in `docs/spec/1.6/`, so profiles 1–3 are implemented from OCPP 2.0.1 part 2 §A00. The 1.6 Basic-auth password encoding differs from 2.0.1 (A00.FR.205 says so) and is not handled; the `BasicAuthenticator` lookup receives the raw password string. Revisit when the whitepaper is added.
 
 ## 10. Documentation site
 
