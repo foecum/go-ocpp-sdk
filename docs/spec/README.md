@@ -45,15 +45,16 @@ If a schema and the spec text still conflict after errata, record it in
 | `Appendices_CSV_v1.5.zip` | Components and variables, machine readable (extract to `appendices-csv/`) |
 | `ReadMe.md` | OCA release notes for this set |
 
-### `2.1/` (OCPP 2.1 edition 2, Phase 10 only)
+### `2.1/` (OCPP 2.1 edition 2)
 
 Same structure as 2.0.1, with `OCPP-2.1_*` file names,
 `OCPP-2.1_edition2_part2_appendices_v21.pdf` and `Appendices_CSV_v2.1.zip`.
 
 ## Notes
 
-- The 2.0.1 and 2.1 schemas and appendices CSVs are still zipped. Extract them
-  when Phase 8 starts.
+- Extract the schemas zips to `schemas/` and the appendices zips to
+  `Appendices_CSV_v1.5/` (2.0.1) and `Appendices_CSV_v2.1/` (2.1); the generator
+  (`internal/gen`) reads them from there. The 2.1 zip holds one folder: move its files up.
 - Prefer the appendices CSVs over copying component and variable tables out of
   the PDF.
 - CALLERROR spelling differs: 1.6 uses `FormationViolation` and

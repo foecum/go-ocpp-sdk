@@ -43,12 +43,6 @@ func (f *fakeCP) goOnline() {
 	}
 }
 
-func (f *fakeCP) goOffline() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.connected = make(chan struct{})
-}
-
 func (f *fakeCP) WaitConnected(ctx context.Context) error {
 	f.mu.Lock()
 	c := f.connected

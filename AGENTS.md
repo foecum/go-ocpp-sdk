@@ -15,7 +15,7 @@ stations and their central management system.
 - Licence: see `LICENSE` (ask the owner if missing)
 - Roles supported: **Charge Point / Charging Station** (client) and
   **Central System / CSMS** (server)
-- Protocol versions, in order: **OCPP 1.6J** → **OCPP 2.0.1** → OCPP 2.1 (later, optional)
+- Protocol versions, in order: **OCPP 1.6J** → **OCPP 2.0.1** → **OCPP 2.1**
 
 ## 2. Source of truth for the spec
 
@@ -27,7 +27,7 @@ stations and their central management system.
   - `docs/spec/2.0.1/` — OCPP 2.0.1 edition 4: parts 0–2, part 2 appendices,
     part 4 (OCPP-J), errata, `appendices-csv/`, `schemas/`; parts 5–6
     (certification profiles, test cases) for checking behaviour only
-  - `docs/spec/2.1/` — OCPP 2.1 edition 2, same structure; Phase 10 only
+  - `docs/spec/2.1/` — OCPP 2.1 edition 2, same structure (Phase 10)
 - Order of precedence when documents disagree: errata sheet → OCPP-J spec
   (for framing/transport) → main specification → JSON schema. If a schema and
   the spec text still conflict after errata, record it in "Known gaps" and ask.
@@ -63,18 +63,24 @@ go-ocpp-sdk/
 │   └── security/           // 1.6 security whitepaper extension (Phase 7)
 ├── v201/
 │   ├── types/
+│   ├── appendices/         // standardized names from the part 2 appendices
 │   └── <one package per functional block, see Phase 8>
+├── v21/                    // same layout as v201, plus bidirectional, dercontrol, batteryswap
 ├── chargepoint/            // high-level client API
 │   ├── v16/
-│   └── v201/
+│   ├── v201/
+│   └── v21/
 ├── csms/                   // high-level server API
 │   ├── v16/
-│   └── v201/
+│   ├── v201/
+│   └── v21/
 ├── internal/               // helpers not part of the public API
 ├── site/                   // HTML documentation site (GitHub Pages), see section 10
 ├── examples/
 │   ├── v16/chargepoint/  v16/csms/
-│   └── v201/chargingstation/  v201/csms/
+│   ├── v201/chargingstation/  v201/csms/
+│   ├── v21/chargingstation/  v21/csms/
+│   └── loadtest/
 └── docs/spec/
 ```
 
@@ -125,12 +131,13 @@ go test -race ./...
 scripts/coverage.sh        # fails if any package is below 95% coverage
 ```
 
-The OCPP 2.0.1 sources under `v201/` are generated from the JSON schemas. After changing
-the generator (`internal/gen201`) or the schemas, regenerate them (the test fails when the
+The OCPP 2.0.1 and 2.1 sources under `v201/` and `v21/` (and the generated parts of `csms/` and
+`chargepoint/` for them) are generated from the JSON schemas and the appendices CSV files.
+After changing the generator (`internal/gen`), its tables, or the schemas, regenerate them (the test fails when the
 committed files are out of date):
 
 ```bash
-go test ./internal/gen201 -run TestGeneratedCodeIsUpToDate -update
+go test ./internal/gen -run TestGeneratedCodeIsUpToDate -update
 ```
 
 Optional when available: `staticcheck ./...`, `golangci-lint run`.
@@ -274,8 +281,13 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Review public API for consistency; write `CHANGELOG.md`  (review: docs/api-review.md)
 - [x] Tag `v1.0.0` (ask owner first)
 
-### Phase 10 — OCPP 2.1 (later, ask owner)
-- [ ] Plan only when the owner asks
+### Phase 10 — OCPP 2.1
+- [x] Plan, approved by the owner
+- [x] OCPP-J message types SEND and CALLRESULTERROR in `ocppj`
+- [x] Generator for both 2.0.1 and 2.1 (`internal/gen`); `v21/types` and 19 block packages (91 messages)
+- [x] `csms/v21` and `chargepoint/v21`; `examples/v21/*`; load test, fuzz and benchmarks for 2.1
+- [x] Known gaps closed: spec-text constraints, appendices constants, 1.6 transaction message queue, CSMS `ForEach`
+- [ ] Tag `v1.1.0` (ask owner first)
 
 ## 8. Decisions
 
@@ -288,7 +300,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Coverage floor of 95% per package plus full critical-path coverage, enforced by `scripts/coverage.sh` and CI — set by the owner.
 - 2026-11-25 — `ErrorCode` and the per-version code sets live in the root `ocpp` package (not `ocppj`) so `ocpp.CallError` can use them without an import cycle. OCPP 2.1 uses the 2.0.1 code set (checked against 2.1 OCPP-J table 8).
 - 2026-11-25 — Validation is hand-written `Validate()` methods on requests/responses, no validator dependency.
-- 2026-11-25 — Framing rules: unreadable message ID is answered with `-1` (2.0.1 OCPP-J 4.2.3); unknown message type gets `MessageTypeNotSupported` in 2.0.1/2.1 and is ignored in 1.6; a `null` payload is accepted and treated as `{}`.
+- 2026-11-25 — Framing rules: unreadable message ID is answered with `-1` (2.0.1 OCPP-J 4.2.3); unknown message type gets `MessageTypeNotSupported` in 2.0.1 and is ignored in 1.6 and 2.1 (2.1 errata 2026-09, part 4, 4.1/4.3); a `null` payload is accepted and treated as `{}`.
 - 2026-11-25 — `ocppj.Endpoint` is transport-agnostic (the transport passes a `Send` func and feeds `HandleFrame`). Defaults: 30s response timeout counted from send, 1000-call bounded queue. A caller whose context ends frees the outstanding slot (treated like a timeout) so the queue keeps moving; late responses are dropped. Incoming CALLs run in their own goroutine so handlers may call back into the peer.
 - 2026-11-25 — Documentation is a self-contained static site in `site/`, deployed to GitHub Pages by `.github/workflows/pages.yml` (only `site/` is published, never `docs/spec/`). Updating it is part of every change that affects users (section 10) — set by the owner.
 - 2026-11-25 — WebSocket library: `github.com/coder/websocket` (v1.8.15). Reasons: actively maintained (gorilla's last release was June 2024), context-aware reads/writes/pings/dials (our convention: `context.Context` first), safe concurrent writes (gorilla needs a manual write mutex), standard-library-only dependencies, built-in `Subprotocols` negotiation. Approved by the owner.
@@ -308,13 +320,13 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — `v0.1.0` tagged locally with the owner's OK (OCPP 1.6J complete). Not pushed: the owner pushes `main` and the tag, after CI and Pages have run.
 - 2026-11-25 — Security extension (approved by the owner): all its types live in `v16/security` (not in the shared `types`); its enumerations are generated from the whitepaper schemas and renamed where they clash with Core ones (`SignedFirmwareStatus`, `ExtendedMessageTrigger`, `SignedUpdateFirmwareStatus`); security event names are untyped string constants with `IsKnownEvent` / `IsCriticalEvent`; wiring is a `Security` field in both `Config`s with `Unimplemented...` handlers (Central System side: security events, SignCertificate, log and firmware status; station side: certificates, GetLog, SignedUpdateFirmware, ExtendedTriggerMessage). `internal/schematest` inlines `$ref` so the draft-06 schemas can be tested.
 - 2026-11-25 — No Claude/AI attribution trailers in commits (owner's request): the local history was rewritten to remove `Co-Authored-By` lines. Commits up to the first push (`1f8f63f`, tag `v0.1.0`) were already on the remote, so publishing the rewrite needs a force push by the owner.
-- 2026-11-25 — OCPP 2.0.1 types and messages are generated (approved by the owner): `internal/gen201` reads `docs/spec/2.0.1/schemas` and writes `v201/types` (143 shared definitions: structs with `Validate()`, enums with `IsValid()`) and one package per functional block (`v201/<block>`: `XRequest`/`XResponse`, `Validate()`, `Features()`, `doc.go`), plus `v201/v201.go` (`NewRegistry`). Generated files carry the standard "Code generated ... DO NOT EDIT" header and are committed; `TestGeneratedCodeIsUpToDate` fails if they drift (run with `-update` to rewrite). The block table and request directions are in `internal/gen201/tables.go` (64 messages: 24 from the station, 39 from the CSMS, DataTransfer both).
+- 2026-11-25 — OCPP 2.0.1 types and messages are generated (approved by the owner): `internal/gen201` (now `internal/gen`) reads `docs/spec/2.0.1/schemas` and writes `v201/types` (143 shared definitions: structs with `Validate()`, enums with `IsValid()`) and one package per functional block (`v201/<block>`: `XRequest`/`XResponse`, `Validate()`, `Features()`, `doc.go`), plus `v201/v201.go` (`NewRegistry`). Generated files carry the standard "Code generated ... DO NOT EDIT" header and are committed; `TestGeneratedCodeIsUpToDate` fails if they drift (run with `-update` to rewrite). The block table and request directions are in `internal/gen/profiles.go` (64 messages: 24 from the station, 39 from the CSMS, DataTransfer both).
 - 2026-11-25 — 2.0.1 conventions: Go names strip the schema's `Type`/`EnumType` suffix and use initialisms (`IDToken`, `EVSEID`, `OCPPCSMSURL`); an enum whose name an object already has keeps `Enum` (`IDTokenEnum`); a field whose name clashes with the `Action` method is renamed (`CertificateAction`). Optional scalars/structs/timestamps are pointers, optional strings/enums use the empty value, arrays are always `omitempty` (an absent optional array is fine, a present one must meet minItems/maxItems). A required string must be non-empty except the allow-listed `SetVariableData.attributeValue`. Properties without a type (DataTransfer `data`) are `json.RawMessage`. `customData` is `*types.CustomData`, which keeps unknown vendor properties. Decimals are `float64`.
 - 2026-11-25 — `ocpp.DateTime` (root package) is the one DateTime type for every version; `v16/types.DateTime` and `v201/types.DateTime` are aliases of it. 2.0.1 validation helpers are in `internal/check`.
 - 2026-11-25 — Schema tests for 2.0.1 derive minimal and full sample payloads from each schema (`schematest.RunGenerated`) and break them in every way the schema forbids (required, maxLength, enum, type, date-time, minItems/maxItems, minimum/maximum). `schematest.AllowMutation` lists the rare cases where the spec text overrides the schema (1.6 `GetInstalledCertificateIds.conf` may be empty).
 - 2026-11-25 — Bug fix after v0.1.0: a connection whose handshake completed after `ws.Server.Shutdown` had taken its snapshot of open connections was never closed, so Shutdown waited for its whole context (seen as a flaky `TestServeAndShutdown` in CI). Such a connection is now closed with 1001 as it registers. The tagged v0.1.0 contains the bug; a v0.1.1 is worth tagging (ask the owner).
 - 2026-11-25 — Shared lifecycle (no behaviour change for 1.6): the connection handling common to `csms/v16` and `csms/v201` lives in `internal/csmscore` (generic `Server[H]`, `Session`, `Call`), and the one common to `chargepoint/v16` and `chargepoint/v201` in `internal/cpcore` (`Station`, `Call`). The public `ChargePoint` types hold them in an unexported field and forward `ID`, `Version`, `RemoteAddr`, `Done`, `Close` (CSMS side) and `Run`, `Close`, `Connected`, `WaitConnected` (station side) explicitly, so the public method sets are exactly those of v0.1.0 and `internal` types do not leak into the documentation. (They were embedded for a few commits; the API review caught that.)
-- 2026-11-25 — 2.0.1 high-level APIs: the handler interfaces, `Unimplemented...` structs, dispatch and typed calls are generated by `internal/gen201` (`highlevel.go`) from the block table and the direction table, so they cannot drift from the messages; `Config`, `CSMS` and `ChargePoint` are hand-written. One handler interface per functional block that has messages the side receives (`<Name>Handler`, `Config.<Name>`; names in `gen201.HandlerNames`); blocks with nothing to receive on a side (CSMS: local auth list, remote control, tariff and cost; station: meter values) have no field there. Same rules as 1.6: nil or unimplemented handler answers `NotSupported`, unknown action `NotImplemented`. Tests derive their expectations from `gen201.Directions` by reflection, and `csms/v201` has the end-to-end scenario test.
+- 2026-11-25 — 2.0.1 high-level APIs: the handler interfaces, `Unimplemented...` structs, dispatch and typed calls are generated by `internal/gen` (`highlevel.go`) from the block table and the direction table, so they cannot drift from the messages; `Config`, `CSMS` and `ChargePoint` are hand-written. One handler interface per functional block that has messages the side receives (`<Name>Handler`, `Config.<Name>`; names in `gen.V201.HandlerNames`); blocks with nothing to receive on a side (CSMS: local auth list, remote control, tariff and cost; station: meter values) have no field there. Same rules as 1.6: nil or unimplemented handler answers `NotSupported`, unknown action `NotImplemented`. Tests derive their expectations from `gen.V201.Directions` by reflection, and `csms/v201` has the end-to-end scenario test.
 - 2026-11-25 — 2.0.1 examples (`examples/v201/csms`, `examples/v201/chargingstation`) mirror the 1.6 ones: plain `ws://` with optional Basic auth, in-memory state only (the station keeps a tiny variable map, not a device model), only the public API; `examples/v201/smoke_test.go` builds both and runs a remote-started session end to end (skipped with `-short`). Neither example has `Example` functions; the smoke test is their test.
 - 2026-11-25 — `v0.2.0` tagged locally with the owner's OK (OCPP 2.0.1 messages, high-level APIs and examples). Not pushed: the owner pushes `main` and the tag, after CI and Pages have run. The tag also carries the `ws.Server` shutdown fix, so it supersedes the planned v0.1.1.
 - 2026-11-25 — Fuzzing: six targets (`ocppj` FuzzParse / FuzzRegistryDecode / FuzzEndpointHandleFrame, `ocpp` FuzzDateTime, `v16` and `v201` FuzzDecode over every message) check for panics and for accept-then-roundtrip consistency. Their seeds run as ordinary tests; `.github/workflows/fuzz.yml` fuzzes each for 60 s weekly and on demand (approved by the owner). A failing input is uploaded as an artifact and must be committed under `testdata/fuzz` with its fix.
@@ -323,14 +335,21 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — API review before v1.0.0 (owner approved the recommendations in `docs/api-review.md`): `ocppj.CallError` renamed `ocppj.CallErrorFrame` (so it no longer clashes with `ocpp.CallError`); `CSMS.ChargePoints()` renamed `CSMS.ChargePointIDs()` in `csms/v16` and `csms/v201`; the `Close()` exception to the context rule is recorded in section 4; everything else in the review is kept as is. A `ForEach` helper and the transaction-message retry helper stay additive post-1.0 candidates.
 - 2026-11-25 — `v1.0.0` tagged locally with the owner's OK, with the known gaps in section 9 still open (unenforced Part 2 field-table constraints, no appendices constants, no transaction-message retry helper). Not pushed: the owner pushes `main` and the tag after CI has run. From here the public API is stable: breaking changes need a new major version.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
+- 2026-11-26 — OCPP 2.1 (approved by the owner; released as a minor version, v1.1.0, since it is additive): the generator `internal/gen201` is now `internal/gen` and takes a `Profile` (`gen.V201`, `gen.V21`: directory, schema directory, blocks, directions, handler names, rules, one-way messages, appendices). The 2.0.1 output changed only in its header comment. `v21` has its own types and does not import `v201`; `CustomData` and the `DateTime` helpers are copies. A message that is unchanged from 2.0.1 is still its own type, because `ocpp2.1` is a different subprotocol. 2.1 has 91 messages (the 64 of 2.0.1 plus 27, none removed), 19 blocks: 16 as before and Q `bidirectional` (Bidirectional Power Transfer), R `dercontrol` (DER Control), S `batteryswap` (Battery Swapping); the new messages are placed in the block whose use cases use them (periodic event streams in Diagnostics, tariffs in Tariff and Cost, dynamic schedules and priority charging in Smart Charging, settlement, web payment and VAT in Authorization, GetCertificateChainStatus in `iso15118`). The senders of the 27 new messages were read from the scenarios in part 2 (for example ClosePeriodicEventStream is sent by the station, NotifyWebPaymentStarted and RequestBatterySwap by the CSMS).
+- 2026-11-26 — SEND and CALLRESULTERROR (OCPP-J 2.1 part 4, 4.1.3, 4.2.3, 4.2.4): `ocppj` parses and writes them on 2.1 connections only (elsewhere they are unknown message types). A SEND is not queued behind CALLs, may be sent while a CALL is outstanding, is never answered (a malformed or unknown SEND is only logged) and its incoming handler (`Config.SendHandler`) runs on one goroutine per endpoint in arrival order, with the same queue bound as calls (the newest message is dropped when it is full). A CALLRESULT that cannot be decoded is answered with a CALLRESULTERROR on 2.1. Features of unconfirmed messages are built with `ocpp.NewSendFeature` (`ResponseType()` is nil, `ocpp.IsOneWay`). The only SEND message, NotifyPeriodicEventStream, is a type without a `Request` suffix (the specification names it so); handlers return `error` and the station sends it with `ChargePoint.NotifyPeriodicEventStream(ctx, msg) error`. Its schema example in OCPP-J part 4 is wrong (errata 2026-09, 4.2): `t` is a number, `basetime` is required.
+- 2026-11-26 — Constraints from the specification text beyond the schemas are listed per profile in `internal/gen/profiles.go` (`Rules`, Go expressions built from `internal/check`) and enforced in the generated `Validate`; tests in `v201/rules_test.go`, `v21/rules_test.go`, `v21/types/rules_test.go`. Only clear, mechanically checkable statements were taken (a conditional required field, a range, a syntax, "SHALL be > 0"); text with "should", cross-message conditions and conditions on device model variables were not. Errata beat the schemas: `pctMaxDischargePower` is required (errata 2026-09, 2.28) and `PowerMonitoringMustTrip` is refused as a stand-alone DER control (2.30). The schema test samples know these rules (`schematest.sampleValue`).
+- 2026-11-26 — Appendices (`v201/appendices`, `v21/appendices`): generated from the CSV files (components, variables, device model, units, reason codes, security events; for 2.1 also idToken types, connector types, charging limit sources, payment brands and recognitions, additionalInfo types, signing methods) as string constants (names are prefix plus the value, for example `ComponentOCPPCommCtrlr`, `UnitKWh`, `ReasonCodeInvalidProfile`) and tables. The messages still carry plain strings, because vendors may add values. Two units that differ only in case get a `Lower` suffix on the second. `appendices` holds no behaviour apart from `IsKnownSecurityEvent` and `IsCriticalSecurityEvent`.
+- 2026-11-26 — Transaction message queue for 1.6 (`chargepoint/v16.TransactionQueue`, from section 3.7 of the specification): opt-in and separate from `ChargePoint`, so the offline behaviour of 2026-11-25 (calls fail fast, nothing is queued) is unchanged for everything else. The application hands StartTransaction, StopTransaction and MeterValues to the queue and runs it; it delivers them oldest first, waits while offline without counting that as a failure, retries what the Central System fails to process (a CALLERROR, a timeout or an unusable answer) up to `Attempts` times waiting `RetryInterval` times the number of earlier attempts, then drops the message and goes on (`OnDiscard`). A StartTransaction queued offline returns a `Transaction` handle; messages queued with it get the assigned transactionId, and are dropped if the start was dropped. Persistence is a `TransactionStore` interface with an in-memory default and `FileStore` (atomic JSON file); the decision on persistence was left to the implementation: it is optional and does not need a dependency.
+- 2026-11-26 — `CSMS.ForEach(fn)` in `csms/v16`, `v201` and `v21` visits connected stations in identity order (additive, so a minor version).
 
 ## 9. Known gaps / skipped spec items
 
 List anything not implemented or simplified, with a reason.
 
 - (none yet)
-- Opt-in retry/queue helper for transaction messages (StartTransaction, StopTransaction, MeterValues) per the 1.6 configuration keys: not implemented; the owner wants it added later (it needs persistence decisions).
-- 2.0.1: constraints stated only in the Part 2 field tables (not in the schemas) are not yet enforced; the review of those tables is still to do. Standardized components/variables, reason codes and security events (appendices CSVs) are not yet available as constants.
+- 2.0.1 and 2.1: the field tables of part 2 were compared with the schemas (cardinality, string lengths, ranges, array sizes, enumeration values) and agree, apart from arrays that the table gives as 0..* while the schema says `minItems` 1 (an absent array is accepted, a present one must have an element, as before). The conditions stated in the descriptions were reviewed and the unambiguous ones are enforced (see Decisions 2026-11-26); the rest ("should", conditions on other messages or on device model variables) are not.
+- 2.1: the character set of `identifierString` and `string` types is not enforced (the specification limits them), for the same reason as in 1.6.
+- 2.1: the examples of tariff cost calculation and the dynamic schedule rules (`UpdateDynamicSchedule` limits against `maxOfflineDuration`) are application behaviour; the SDK only validates and transports the messages.
 - 1.6 string types: the specification restricts `CiString` and `String` to printable ASCII. Only lengths are enforced (schemas do the same), because real charge points send other characters. Revisit if strictness is wanted.
 - 1.6 security profiles: resolved by the security whitepaper (edition 3, now in `docs/spec/1.6/`). The Basic-auth password is the `AuthorizationKey` (16–20 bytes as 32–40 hex digits, sent as that text), which `ws.BasicAuthenticator` already compares as given; `security.CheckAuthorizationKey` / `GenerateAuthorizationKey` validate and create keys. Still open: the whitepaper tolerates TLS 1.0/1.1 for old stations; `ws` requires TLS 1.2 or newer and does not support them.
 - 1.6 security extension, leniencies: `serialNumber` in `CertificateHashData` is checked for hexadecimal characters only (the whitepaper says no leading zeros; stations that send them are accepted); `GetInstalledCertificateIds.conf` accepts an empty `certificateHashData` list (the spec says 0..*, the schema says at least 1; the spec wins); certificates and CSRs are checked as PEM blocks of the right type but their X.509 contents are not parsed.

@@ -186,7 +186,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
 <div class="hero" id="top">
   <div class="hero-inner">
     <div>
-      <span class="pill"><span class="dot"></span> v1.0 · OCPP 1.6J and 2.0.1</span>
+      <span class="pill"><span class="dot"></span> v1 · OCPP 1.6J, 2.0.1 and 2.1</span>
       <h1>Talk <em>OCPP</em> from Go.</h1>
       <p class="lead">An SDK for the Open Charge Point Protocol, the language EV charging stations speak to their central system. Both roles, JSON over WebSocket, built on the standard library.</p>
       <div class="cta">
@@ -230,6 +230,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
     <a href="#examples">Runnable examples</a>
     <a href="#messages">OCPP 1.6 messages</a>
     <a href="#v201">OCPP 2.0.1</a>
+    <a href="#v21">OCPP 2.1</a>
     <a href="#transport">WebSocket transport</a>
     <a href="#frames">Working with frames</a>
     <a href="#errors">Errors</a>
@@ -248,7 +249,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note"><strong>v1.0</strong>OCPP 1.6J (all 28 messages and the 11 of the security extension) and OCPP 2.0.1 (all 64 messages) are complete for both roles, with the high-level <code>csms</code> and <code>chargepoint</code> APIs and the WebSocket transport with security profiles 1 to 3. The public API follows semantic versioning. OCPP 2.1 is planned.</div>
+      <div class="note"><strong>v1</strong>OCPP 1.6J (all 28 messages and the 11 of the security extension), OCPP 2.0.1 (all 64 messages) and OCPP 2.1 (all 91 messages) are complete for both roles, with the high-level <code>csms</code> and <code>chargepoint</code> APIs and the WebSocket transport with security profiles 1 to 3. The public API follows semantic versioning.</div>
     </section>
 
     <section id="install">
@@ -491,8 +492,32 @@ srv, err := csms.New(csms.Config{Logger: logger})</code></pre></div>
       <ul>
         <li>A call made while disconnected fails at once with an error matching <code>ocpp.ErrNotConnected</code>. Nothing is queued or retried for you.</li>
         <li>A call that was waiting for its answer when the connection dropped also returns <code>ocpp.ErrNotConnected</code> straight away, not after the timeout. The other side may or may not have processed it, so only resend what is safe to repeat.</li>
-        <li>OCPP 1.6 requires a station to keep and retry transaction messages (<code>StartTransaction</code>, <code>StopTransaction</code>, <code>MeterValues</code>). Build that on <code>Connected()</code> and <code>WaitConnected()</code>; a ready-made opt-in retry helper is planned.</li>
+        <li>OCPP 1.6 requires a station to keep and retry transaction messages (<code>StartTransaction</code>, <code>StopTransaction</code>, <code>MeterValues</code>). <code>chargepoint/v16</code> has an opt-in <a href="#txqueue"><code>TransactionQueue</code></a> that does it; the rest of the SDK stays fail-fast.</li>
         <li>The station reconnects by itself using the back-off from the WebSocket section: <code>Reconnect: ws.Reconnect{WaitMinimum: …, RandomRange: …, RepeatTimes: …}</code>, or leave it zero for the defaults.</li>
+      </ul>
+      <h3 id="txqueue">Transaction messages: <code>TransactionQueue</code> (1.6)</h3>
+      <p>Section 3.7 of the OCPP 1.6 specification asks a station to deliver <code>StartTransaction</code>, <code>StopTransaction</code> and <code>MeterValues</code> in chronological order, to keep them while it is offline, and to resend what the Central System fails to process, as many times as the <code>TransactionMessageAttempts</code> configuration key says and waiting <code>TransactionMessageRetryInterval</code> times the number of earlier attempts. <code>chargepoint.NewTransactionQueue</code> does that. You hand your transaction messages to the queue instead of calling the station, and run it:</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">q, err := chargepoint.NewTransactionQueue(cp, chargepoint.TransactionQueueConfig{
+	Attempts:      3,                // TransactionMessageAttempts
+	RetryInterval: 60 * time.Second, // TransactionMessageRetryInterval
+	Store:         chargepoint.FileStore("transactions.json"), // optional: survives restarts
+})
+if err != nil {
+	log.Fatal(err)
+}
+go q.Run(ctx)
+
+tx, _ := q.StartTransaction(core.StartTransactionRequest{ConnectorID: 1, IDTag: "TAG", Timestamp: types.Now()})
+// ... later, even while the station is offline:
+_ = q.MeterValues(tx, core.MeterValuesRequest{ConnectorID: 1, MeterValue: []types.MeterValue{{
+	Timestamp: types.Now(), SampledValue: []types.SampledValue{{Value: "500"}}}}})
+_ = q.StopTransaction(tx, core.StopTransactionRequest{MeterStop: 1500, Timestamp: types.Now()})</code></pre></div>
+      <ul>
+        <li>The queue sends one message at a time, oldest first, once the station is connected. A call that fails because the connection was lost is simply tried again after reconnecting; it does not count as a failure of the Central System.</li>
+        <li>A CALLERROR, a timeout or an unusable answer counts as a failure to process. After the last attempt the message is dropped, so one bad message cannot block the rest; <code>OnDiscard</code> reports it.</li>
+        <li><code>StartTransaction</code> returns a <code>*Transaction</code> handle. Pass it to <code>StopTransaction</code> and <code>MeterValues</code> and the queue fills in the <code>transactionId</code> the Central System assigns. If the start is dropped, so are the messages that belong to it. Pass <code>nil</code> for a transaction you started yourself.</li>
+        <li>Without a <code>Store</code> the queue lives in memory only. <code>FileStore</code> keeps it in a JSON file, replaced atomically on every change; implement <code>TransactionStore</code> to keep it elsewhere. <code>Transaction(localID)</code> returns the handle of a transaction after a restart.</li>
+        <li>Messages that are not transaction-related (<code>Authorize</code>, <code>StatusNotification</code>, and so on) go directly through the station and need not wait.</li>
       </ul>
     </section>
 
@@ -531,10 +556,15 @@ level=INFO msg="transaction event" id=CS001 event=Updated transaction=CS001-1 se
 level=INFO msg="request stop transaction" id=CS001 transaction=CS001-1 status=Accepted
 level=INFO msg="transaction event" id=CS001 event=Ended transaction=CS001-1 seq=4 trigger=RemoteStop state=Idle</code></pre></div>
       <p>The flags are the same as for 1.6, plus <code>-remote-start</code> on the Central System. The test suite builds and runs this pair too.</p>
+      <h3>OCPP 2.1</h3>
+      <p>The pair in <code>examples/v21</code> does the same and adds what 2.1 brings: after the boot the Central System sets a default tariff with <code>SetDefaultTariff</code>, and the station opens a periodic event stream and sends its values as <code>NotifyPeriodicEventStream</code> messages, which are unconfirmed:</p>
+      <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go run ./examples/v21/csms -addr :8080 -remote-start
+go run ./examples/v21/chargingstation -id CS001</code></pre></div>
       <h3>Load test</h3>
       <p><code>examples/loadtest</code> runs a Central System and many simulated stations in one process over loopback WebSockets, for either version, and reports throughput and latency percentiles:</p>
       <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go run ./examples/loadtest -stations 1000 -duration 30s
-go run ./examples/loadtest -stations 1000 -version 2.0.1</code></pre></div>
+go run ./examples/loadtest -stations 1000 -version 2.0.1
+go run ./examples/loadtest -stations 1000 -version 2.1</code></pre></div>
       <p>1,000 stations need about 2,000 sockets, so raise <code>ulimit -n</code> if the run fails to connect. On the author's 8-core machine, 1,000 stations connect in about 0.2 s with no errors. Treat the figures as indicative: both ends share one process.</p>
     </section>
 
@@ -621,7 +651,7 @@ fmt.Println(bad.Validate()) // ocpp: invalid field "connectorId": must be at lea
 
     <section id="v201">
       <h2>OCPP 2.0.1</h2>
-      <div class="note"><strong>Complete</strong>The messages and the high-level APIs are available, with <a href="#examples">runnable examples</a>. Not yet available: a device-model helper (the standardized component and variable names).</div>
+      <div class="note"><strong>Complete</strong>The messages and the high-level APIs are available, with <a href="#examples">runnable examples</a>. The standardized component, variable, unit, reason code and security event names are constants in <code>v201/appendices</code>.</div>
       <p>All 64 messages of OCPP 2.0.1 are implemented as typed <code>...Request</code> and <code>...Response</code> structs, one package per functional block of the specification, plus <code>v201/types</code> for the shared types and enumerations. They are generated from the official JSON schemas, validated on send and receive, and tested against those schemas. <code>v201.NewRegistry()</code> registers them all.</p>
       <div class="tablewrap"><table>
         <tr><th>Block</th><th>Name</th><th>Package</th></tr>
@@ -706,7 +736,52 @@ func main() {
 	log.Println("boot:", boot.Status, "- heartbeat every", boot.Interval, "s")
 }
 </code></pre></div>
-      <p>Security profiles, logging, errors and offline behaviour work as described for 1.6. Constraints that the specification states only in its field tables, and the standardized component and variable names, are not enforced or available as constants yet.</p>
+      <p>Security profiles, logging, errors and offline behaviour work as described for 1.6.</p>
+      <h3>Standardized names: <code>appendices</code></h3>
+      <p>The appendices of the specification list the standard components, variables, units of measure, reason codes and security events. <code>v201/appendices</code> has them as constants and tables, generated from the CSV files that accompany the specification. The messages still carry plain strings, because a vendor may add its own names; the constants save typing and let you check what is standard.</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">get := provisioning.GetVariablesRequest{GetVariableData: []types.GetVariableData{{
+	Component: types.Component{Name: appendices.ComponentOCPPCommCtrlr},
+	Variable:  types.Variable{Name: appendices.VariableHeartbeatInterval},
+}}}
+
+appendices.IsCriticalSecurityEvent(appendices.SecurityEventFirmwareUpdated) // true
+for _, e := range appendices.DeviceModel { /* component, variable, required, data type, unit */ }</code></pre></div>
+      <h3>Constraints beyond the schemas</h3>
+      <p>The JSON schemas do not state everything the specification text does. The messages also enforce the unambiguous rules, on send and on receive: a <code>SendLocalList</code> with <code>updateType</code> Full needs an <code>idTokenInfo</code> on every entry; <code>evseId</code> is greater than 0 in <code>NotifyChargingLimit</code>, <code>NotifyEVChargingSchedule</code> and <code>RequestStartTransaction</code>; the charging profile of a remote start is a <code>TxProfile</code>; <code>transactionId</code> in a profile needs <code>TxProfile</code>; <code>valuesList</code> is required for option, member and sequence lists; a Published firmware status has a <code>location</code>; a charging limit has at most one decimal; <code>phaseToUse</code> is 1 to 3 and <code>severity</code> 0 to 9. A violation is answered like any other invalid payload.</p>
+    </section>
+
+    <section id="v21">
+      <h2>OCPP 2.1</h2>
+      <div class="note"><strong>Complete</strong>All 91 messages and the high-level APIs are available, with <a href="#examples">runnable examples</a>.</div>
+      <p>OCPP 2.1 is 2.0.1 plus 27 messages and three new functional blocks; no message was removed. <code>v21</code> has the same layout as <code>v201</code>: one package per functional block, <code>v21/types</code> for the shared types, <code>v21.NewRegistry()</code>, and the high-level <code>csms/v21</code> and <code>chargepoint/v21</code> (packages <code>csms</code> and <code>chargepoint</code>). They are generated from the 2.1 JSON schemas and tested against them. A message that did not change is still its own type in <code>v21</code>, because <code>ocpp2.1</code> is a different WebSocket subprotocol; a client that offers several versions gets the one the server prefers.</p>
+      <div class="tablewrap"><table>
+        <tr><th>Block</th><th>New messages in 2.1</th></tr>
+        <tr><td>C Authorization (<code>authorization</code>)</td><td>NotifySettlement, NotifyWebPaymentStarted, VatNumberValidation</td></tr>
+        <tr><td>I Tariff and Cost (<code>tariffandcost</code>)</td><td>ChangeTransactionTariff, ClearTariffs, GetTariffs, SetDefaultTariff</td></tr>
+        <tr><td>K Smart Charging (<code>smartcharging</code>)</td><td>NotifyPriorityCharging, PullDynamicScheduleUpdate, UpdateDynamicSchedule, UsePriorityCharging</td></tr>
+        <tr><td>M Certificate Management (<code>iso15118</code>)</td><td>GetCertificateChainStatus</td></tr>
+        <tr><td>N Diagnostics (<code>diagnostics</code>)</td><td>AdjustPeriodicEventStream, ClosePeriodicEventStream, GetPeriodicEventStream, NotifyPeriodicEventStream, OpenPeriodicEventStream</td></tr>
+        <tr><td>Q Bidirectional Power Transfer (<code>bidirectional</code>)</td><td>AFRRSignal, NotifyAllowedEnergyTransfer</td></tr>
+        <tr><td>R DER Control (<code>dercontrol</code>)</td><td>ClearDERControl, GetDERControl, NotifyDERAlarm, NotifyDERStartStop, ReportDERControl, SetDERControl</td></tr>
+        <tr><td>S Battery Swapping (<code>batteryswap</code>)</td><td>BatterySwap, RequestBatterySwap</td></tr>
+      </table></div>
+      <p>The <code>csms/v21</code> <code>Config</code> has the same handler fields as for 2.0.1 plus <code>DERControl</code> and <code>BatterySwap</code>; <code>chargepoint/v21</code> adds <code>Bidirectional</code>, <code>DERControl</code> and <code>BatterySwap</code>. As in 2.0.1, a block with no handler answers <code>NotSupported</code>.</p>
+      <h3>Unconfirmed messages</h3>
+      <p>OCPP-J 2.1 adds a message type, <strong>SEND</strong> (<code>[6, id, action, payload]</code>), for messages that need no answer. <code>NotifyPeriodicEventStream</code>, which a station uses to send the values of a periodic event stream in bulk, is the only one. A SEND is not queued behind calls and can go out while a call is waiting for its answer; the receiver never replies, even to a malformed one. It has no <code>Request</code> and <code>Response</code>: the type is <code>diagnostics.NotifyPeriodicEventStream</code>, the station's method returns only an error, and so does the handler:</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">// station
+err := cp.NotifyPeriodicEventStream(ctx, diagnostics.NotifyPeriodicEventStream{
+	ID: 1, Basetime: ocpp.Now(),
+	Data: []types.StreamDataElement{{T: 0, V: "230.4"}, {T: 5, V: "230.2"}},
+})
+
+// Central System: a method of the Diagnostics handler
+func (h handler) NotifyPeriodicEventStream(ctx context.Context, cp *csms.ChargePoint,
+	msg *diagnostics.NotifyPeriodicEventStream) error {
+	return nil // messages arrive one at a time, in the order they were sent
+}</code></pre></div>
+      <p>The other new message type, <strong>CALLRESULTERROR</strong> (<code>[5, id, code, description, details]</code>), is what a receiver sends when it cannot process a response; the SDK sends it for a response that fails validation and reports a received one to <code>ocppj.Config.ResultErrorHandler</code>. Both types exist only on 2.1 connections. On a 2.1 connection a message of an unknown type is ignored (errata 2026-09).</p>
+      <h3>Standardized names and constraints</h3>
+      <p><code>v21/appendices</code> is the 2.1 counterpart of <code>v201/appendices</code>, with the extra lists that 2.1 keeps outside its schemas: idToken types (<code>appendices.IDTokenTypeISO14443</code>), connector types, charging limit sources, payment brands and recognitions, additionalInfo types and signing methods. In 2.1 the <code>type</code> of an idToken is a plain string, so these constants are what you use. <code>v21</code> enforces the constraints of the 2.0.1 section that still apply and adds those of the new data types: a <code>LocalFrequency</code> period needs a V2X frequency curve of at least two points, <code>randomizedDelay</code> only applies to <code>TxProfile</code> and <code>TxDefaultProfile</code>, <code>pctMaxDischargePower</code> is required (errata 2026-09), <code>PowerMonitoringMustTrip</code> is not a stand-alone DER control, and the start and end time of day (<code>HH:MM</code>) and dates (<code>YYYY-MM-DD</code>) of a tariff condition have the specified syntax.</p>
     </section>
 
     <section id="transport">
@@ -944,7 +1019,8 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <li>Message IDs are at most 36 characters; <code>ocppj.NewUUIDGenerator()</code> makes random UUIDs.</li>
         <li>If a frame's ID can't be read, the reply uses ID <code>"-1"</code>, as the 2.0.1 spec requires.</li>
         <li>A <code>null</code> payload is accepted and treated as <code>{}</code>.</li>
-        <li>Unknown message types get <code>MessageTypeNotSupported</code> in 2.0.1 and 2.1, and are ignored in 1.6.</li>
+        <li>OCPP 2.1 adds two frame types, parsed and written only on 2.1 connections: <code>ocppj.Send</code> (<code>[6,id,action,payload]</code>, send it with <code>Endpoint.Send</code> and receive it with <code>Config.SendHandler</code>) and <code>ocppj.CallResultErrorFrame</code> (<code>[5,id,code,description,details]</code>). Register an unconfirmed message with <code>ocpp.NewSendFeature</code>.</li>
+        <li>Unknown message types get <code>MessageTypeNotSupported</code> in 2.0.1, and are ignored in 1.6 and 2.1 (where that error code is deprecated).</li>
       </ul>
     </section>
 
@@ -976,9 +1052,9 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><th>Constant</th><th>Value</th><th>Notes</th></tr>
         <tr><td><code>ocpp.V16</code></td><td><code>ocpp1.6</code></td><td>First target</td></tr>
         <tr><td><code>ocpp.V201</code></td><td><code>ocpp2.0.1</code></td><td>Supported</td></tr>
-        <tr><td><code>ocpp.V21</code></td><td><code>ocpp2.1</code></td><td>Later, optional</td></tr>
+        <tr><td><code>ocpp.V21</code></td><td><code>ocpp2.1</code></td><td>Supported</td></tr>
       </table></div>
-      <div class="note"><strong>Spelling differs between versions</strong>OCPP 1.6 uses <code>FormationViolation</code> and <code>OccurenceConstraintViolation</code> (sic); 2.0.1 and 2.1 use <code>FormatViolation</code> and <code>OccurrenceConstraintViolation</code>, and add <code>MessageTypeNotSupported</code> and <code>RpcFrameworkError</code>. <code>ErrorCode.IsValid(version)</code> checks a code against the right set.</div>
+      <div class="note"><strong>Spelling differs between versions</strong>OCPP 1.6 uses <code>FormationViolation</code> and <code>OccurenceConstraintViolation</code> (sic); 2.0.1 and 2.1 use <code>FormatViolation</code> and <code>OccurrenceConstraintViolation</code>, and add <code>MessageTypeNotSupported</code> (deprecated in 2.1) and <code>RpcFrameworkError</code>. <code>ErrorCode.IsValid(version)</code> checks a code against the right set.</div>
     </section>
 
     <section id="status">
@@ -995,10 +1071,10 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>7</td><td>OCPP 1.6 security extension</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>8</td><td>OCPP 2.0.1: messages, high-level APIs, examples</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>9</td><td>Hardening: fuzzing, benchmarks, load test, API review, v1.0.0</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>10</td><td>OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>10</td><td>OCPP 2.1: messages, SEND and CALLRESULTERROR, high-level APIs, examples; appendices constants, spec-text constraints, 1.6 transaction queue</td><td><span class="badge b-done">Done</span></td></tr>
       </table></div>
       <h3>Supported messages</h3>
-      <p>All 28 OCPP 1.6 messages, the 11 of its security extension, and all 64 OCPP 2.0.1 messages are supported; see the <a href="#messages">1.6 table above</a> and the <a href="#v201">2.0.1 section</a>.</p>
+      <p>All 28 OCPP 1.6 messages, the 11 of its security extension, and all 64 OCPP 2.0.1 messages and all 91 OCPP 2.1 messages are supported; see the <a href="#messages">1.6 table above</a>, the <a href="#v201">2.0.1 section</a> and the <a href="#v21">2.1 section</a>.</p>
     </section>
 
     <section id="contributing">
