@@ -172,7 +172,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
   <div class="topbar-inner">
     <a class="brand" href="#top" aria-label="go-ocpp-sdk home">
       <span class="logo"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
-      go-ocpp-sdk
+      Go OCPP SDK
     </a>
     <span class="spacer"></span>
     <a class="toplink hide-sm" href="#quickstart">Quick start</a>
@@ -229,6 +229,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
     <a href="#highlevel">Central System &amp; Charge Point</a>
     <a href="#examples">Runnable examples</a>
     <a href="#messages">OCPP 1.6 messages</a>
+    <a href="#v201">OCPP 2.0.1</a>
     <a href="#transport">WebSocket transport</a>
     <a href="#frames">Working with frames</a>
     <a href="#errors">Errors</a>
@@ -247,7 +248,7 @@ footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: fle
         <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. One dependency: <code>coder/websocket</code>, for the transport.</p></div>
         <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
       </div>
-      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages and the 11 of the security extension, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is next.</div>
+      <div class="note warn"><strong>Pre-1.0</strong>OCPP 1.6J is complete: all 28 messages and the 11 of the security extension, the high-level <code>csms</code> and <code>chargepoint</code> APIs, and the WebSocket transport with security profiles 1 to 3. The API may still change before 1.0. OCPP 2.0.1 is in progress: all 64 messages and both high-level APIs exist, see <a href="#v201">OCPP 2.0.1</a>; examples are next.</div>
     </section>
 
     <section id="install">
@@ -596,7 +597,97 @@ fmt.Println(bad.Validate()) // ocpp: invalid field "connectorId": must be at lea
         <tr><td><code>SignedFirmwareStatusNotification</code></td><td>Security extension</td><td>Charge Point → Central System</td><td><span class="badge b-done">Supported</span></td></tr>
         <tr><td><code>SignedUpdateFirmware</code></td><td>Security extension</td><td>Central System → Charge Point</td><td><span class="badge b-done">Supported</span></td></tr>
       </table></div>
-      <p>All 28 messages of OCPP 1.6 (JSON) and the 11 messages of its security extension are supported. Planned: OCPP 2.0.1.</p>
+      <p>All 28 messages of OCPP 1.6 (JSON) and the 11 messages of its security extension are supported. OCPP 2.0.1 has its own section below.</p>
+    </section>
+
+    <section id="v201">
+      <h2>OCPP 2.0.1</h2>
+      <div class="note warn"><strong>In progress</strong>The messages and the high-level APIs are available. Runnable examples, a device-model helper and the integration with the README are still to come, and the API may change before 1.0.</div>
+      <p>All 64 messages of OCPP 2.0.1 are implemented as typed <code>...Request</code> and <code>...Response</code> structs, one package per functional block of the specification, plus <code>v201/types</code> for the shared types and enumerations. They are generated from the official JSON schemas, validated on send and receive, and tested against those schemas. <code>v201.NewRegistry()</code> registers them all.</p>
+      <div class="tablewrap"><table>
+        <tr><th>Block</th><th>Name</th><th>Package</th></tr>
+        <tr><td>A</td><td>Security</td><td><code>v201/security</code></td></tr>
+        <tr><td>B</td><td>Provisioning</td><td><code>v201/provisioning</code></td></tr>
+        <tr><td>C</td><td>Authorization</td><td><code>v201/authorization</code></td></tr>
+        <tr><td>D</td><td>Local Authorization List</td><td><code>v201/localauthlist</code></td></tr>
+        <tr><td>E</td><td>Transactions</td><td><code>v201/transactions</code></td></tr>
+        <tr><td>F</td><td>Remote Control</td><td><code>v201/remotecontrol</code></td></tr>
+        <tr><td>G</td><td>Availability</td><td><code>v201/availability</code></td></tr>
+        <tr><td>H</td><td>Reservation</td><td><code>v201/reservation</code></td></tr>
+        <tr><td>I</td><td>Tariff and Cost</td><td><code>v201/tariffandcost</code></td></tr>
+        <tr><td>J</td><td>Meter Values</td><td><code>v201/metervalues</code></td></tr>
+        <tr><td>K</td><td>Smart Charging</td><td><code>v201/smartcharging</code></td></tr>
+        <tr><td>L</td><td>Firmware Management</td><td><code>v201/firmware</code></td></tr>
+        <tr><td>M</td><td>ISO 15118 Certificate Management</td><td><code>v201/iso15118</code></td></tr>
+        <tr><td>N</td><td>Diagnostics</td><td><code>v201/diagnostics</code></td></tr>
+        <tr><td>O</td><td>Display Message</td><td><code>v201/displaymessage</code></td></tr>
+        <tr><td>P</td><td>Data Transfer</td><td><code>v201/datatransfer</code></td></tr>
+      </table></div>
+      <p>The high-level API has the same shape as the 1.6 one. <code>csms/v201</code> (package <code>csms</code>) and <code>chargepoint/v201</code> (package <code>chargepoint</code>) have one handler interface per functional block, set in the matching <code>Config</code> field (<code>Provisioning</code>, <code>Authorization</code>, <code>Transactions</code>, ...), with an embeddable <code>Unimplemented...Handler</code> for each. A block with no handler, or a method you left unimplemented, answers <code>NotSupported</code>. Typed methods call the other side, for example <code>cp.GetVariables</code> on a <code>*csms.ChargePoint</code> or <code>cp.TransactionEvent</code> on a station. A complete program that runs both roles and boots a station:</p>
+      <div class="code"><div class="code-head"><span>main.go</span><button class="copy">Copy</button></div><pre><code class="lang-go">package main
+
+import (
+	"context"
+	"log"
+	"net"
+	"time"
+
+	ocpp "github.com/foecum/go-ocpp-sdk"
+	"github.com/foecum/go-ocpp-sdk/chargepoint/v201"
+	"github.com/foecum/go-ocpp-sdk/csms/v201"
+	"github.com/foecum/go-ocpp-sdk/v201/provisioning"
+	"github.com/foecum/go-ocpp-sdk/v201/types"
+)
+
+// handler answers BootNotification; every other call from a station answers
+// NotSupported.
+type handler struct{ csms.UnimplementedProvisioningHandler }
+
+func (handler) BootNotification(ctx context.Context, cp *csms.ChargePoint,
+	req *provisioning.BootNotificationRequest) (*provisioning.BootNotificationResponse, error) {
+	log.Printf("%s booted (%s): %s %s", cp.ID(), req.Reason, req.ChargingStation.VendorName, req.ChargingStation.Model)
+	return &amp;provisioning.BootNotificationResponse{
+		Status:      types.RegistrationStatusAccepted,
+		CurrentTime: ocpp.Now(),
+		Interval:    300,
+	}, nil
+}
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	srv, err := csms.New(csms.Config{Provisioning: handler{}})
+	if err != nil {
+		log.Fatal(err)
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go srv.Serve(l)
+	defer srv.Shutdown(ctx)
+
+	cp, err := chargepoint.New(chargepoint.Config{URL: "ws://" + l.Addr().String() + "/ocpp", ID: "CS001"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	go cp.Run(ctx)
+	defer cp.Close()
+	if err := cp.WaitConnected(ctx); err != nil {
+		log.Fatal(err)
+	}
+	boot, err := cp.BootNotification(ctx, provisioning.BootNotificationRequest{
+		Reason:          types.BootReasonPowerUp,
+		ChargingStation: types.ChargingStation{VendorName: "Acme", Model: "X1"},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("boot:", boot.Status, "- heartbeat every", boot.Interval, "s")
+}
+</code></pre></div>
+      <p>Security profiles, logging, errors and offline behaviour work as described for 1.6. Constraints that the specification states only in its field tables, and the standardized component and variable names, are not enforced or available as constants yet.</p>
     </section>
 
     <section id="transport">
@@ -865,7 +956,7 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
       <div class="tablewrap"><table>
         <tr><th>Constant</th><th>Value</th><th>Notes</th></tr>
         <tr><td><code>ocpp.V16</code></td><td><code>ocpp1.6</code></td><td>First target</td></tr>
-        <tr><td><code>ocpp.V201</code></td><td><code>ocpp2.0.1</code></td><td>Phase 8</td></tr>
+        <tr><td><code>ocpp.V201</code></td><td><code>ocpp2.0.1</code></td><td>In progress</td></tr>
         <tr><td><code>ocpp.V21</code></td><td><code>ocpp2.1</code></td><td>Later, optional</td></tr>
       </table></div>
       <div class="note"><strong>Spelling differs between versions</strong>OCPP 1.6 uses <code>FormationViolation</code> and <code>OccurenceConstraintViolation</code> (sic); 2.0.1 and 2.1 use <code>FormatViolation</code> and <code>OccurrenceConstraintViolation</code>, and add <code>MessageTypeNotSupported</code> and <code>RpcFrameworkError</code>. <code>ErrorCode.IsValid(version)</code> checks a code against the right set.</div>
@@ -883,7 +974,7 @@ frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
         <tr><td>5</td><td>Remaining 1.6 profiles: firmware, local auth list, reservation, smart charging, remote trigger</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>6</td><td>Examples, docs, v0.1.0</td><td><span class="badge b-done">Done</span></td></tr>
         <tr><td>7</td><td>OCPP 1.6 security extension</td><td><span class="badge b-done">Done</span></td></tr>
-        <tr><td>8</td><td>OCPP 2.0.1</td><td><span class="badge b-next">Next</span></td></tr>
+        <tr><td>8</td><td>OCPP 2.0.1: messages and high-level APIs done; examples next</td><td><span class="badge b-next">In progress</span></td></tr>
         <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
       </table></div>
       <h3>Supported messages</h3>

@@ -177,6 +177,9 @@ func generate(schemaDir string, blocks []Block) (map[string][]byte, error) {
 	if err := g.emitBlocks(); err != nil {
 		return nil, err
 	}
+	if err := g.emitHighLevel(); err != nil {
+		return nil, err
+	}
 	return g.files, nil
 }
 

@@ -89,3 +89,14 @@ var fieldRenames = map[string]string{
 	// A field named Action would clash with the Action method every message has.
 	"Get15118EVCertificateRequest.action": "CertificateAction",
 }
+
+// HandlerNames gives, for each block package, the name used in the high-level
+// APIs: the handler interface is "<Name>Handler" and the Config field is "<Name>".
+var HandlerNames = map[string]string{
+	"security": "Security", "provisioning": "Provisioning", "authorization": "Authorization",
+	"localauthlist": "LocalAuthList", "transactions": "Transactions", "remotecontrol": "RemoteControl",
+	"availability": "Availability", "reservation": "Reservation", "tariffandcost": "TariffAndCost",
+	"metervalues": "MeterValues", "smartcharging": "SmartCharging", "firmware": "Firmware",
+	"iso15118": "ISO15118", "diagnostics": "Diagnostics", "displaymessage": "DisplayMessage",
+	"datatransfer": "DataTransfer",
+}

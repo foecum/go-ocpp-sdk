@@ -9,7 +9,8 @@ central management system.
 **Status: pre-1.0.** OCPP 1.6J is complete: all 28 messages and the 11 of the
 security extension, both roles, WebSocket transport with security profiles 1 to 3.
 The API may still change before 1.0.
-OCPP 2.0.1 is next; see the [roadmap](AGENTS.md#7-roadmap).
+OCPP 2.0.1 is in progress: all 64 messages and the high-level APIs exist (see
+[OCPP 2.0.1](#ocpp-201)); examples are next. See the [roadmap](AGENTS.md#7-roadmap).
 
 - Both roles: charging station (`chargepoint`) and Central System / CSMS (`csms`).
 - OCPP-J (JSON over WebSocket) only; no SOAP.
@@ -164,6 +165,39 @@ Message types are in `v16/core`, `v16/firmware`, `v16/localauth`,
 shared types and enumerations are in `v16/types`. Each message is a `...Request` and a
 `...Confirmation` type named after the specification.
 
+## OCPP 2.0.1
+
+All 64 messages are implemented, one package per functional block of the
+specification (`v201/security`, `v201/provisioning`, `v201/authorization`,
+`v201/transactions`, and so on; shared types in `v201/types`). They are generated
+from the official JSON schemas and checked against them in the tests. The
+high-level APIs are `csms/v201` and `chargepoint/v201` (package names `csms` and
+`chargepoint`). They work like the 1.6 ones, with one handler interface per
+functional block (`Config.Provisioning`, `Config.Authorization`,
+`Config.Transactions`, ...) and an embeddable `Unimplemented...Handler` for each:
+
+```go
+type handler struct{ csms.UnimplementedProvisioningHandler }
+
+func (handler) BootNotification(ctx context.Context, cp *csms.ChargePoint,
+	req *provisioning.BootNotificationRequest) (*provisioning.BootNotificationResponse, error) {
+	return &provisioning.BootNotificationResponse{
+		Status:      types.RegistrationStatusAccepted,
+		CurrentTime: ocpp.Now(),
+		Interval:    300,
+	}, nil
+}
+
+srv, _ := csms.New(csms.Config{Provisioning: handler{}})
+```
+
+The station side is `chargepoint.New(chargepoint.Config{URL: ..., ID: ...})`, then
+`Run`, `WaitConnected` and typed calls such as `cp.BootNotification`. The Central
+System calls a station with `srv.ChargePoint(id)` and methods such as
+`GetVariables`, `SetVariables` and `RequestStartTransaction`. Security profiles,
+logging and error handling are the same as for 1.6. The full program is on the
+documentation site.
+
 ## Security profiles
 
 | Profile | Central System | Charging station |
@@ -279,7 +313,9 @@ System logs everything and calls the station back. Try `-password`, `-tags` and
 |---|---|
 | `github.com/foecum/go-ocpp-sdk` | shared interfaces, errors and version constants |
 | `.../csms/v16`, `.../chargepoint/v16` | the high-level APIs (package names `csms` and `chargepoint`) |
+| `.../csms/v201`, `.../chargepoint/v201` | the high-level OCPP 2.0.1 APIs |
 | `.../v16` and `.../v16/*` | OCPP 1.6 messages, types and registry |
+| `.../v201` and `.../v201/*` | OCPP 2.0.1 messages (one package per functional block), types and registry |
 | `.../ocppj` | OCPP-J framing, call tracking and registries, independent of the transport |
 | `.../ws` | the WebSocket transport and security helpers |
 
