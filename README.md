@@ -18,6 +18,10 @@ central management system.
 go get github.com/foecum/go-ocpp-sdk
 ```
 
+## Documentation
+
+Usage docs: <https://foecum.github.io/go-ocpp-sdk/> (source in [`site/`](site/index.html)).
+
 ## Development
 
 ```bash

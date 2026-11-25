@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go-ocpp-sdk — OCPP for Go</title>
+<meta name="description" content="A Go SDK for OCPP, the Open Charge Point Protocol between EV charging stations and their central system.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310b981'/%3E%3Cpath d='M18 5 9 18h6l-1 9 9-13h-6z' fill='white'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f7f8fb; --surface: #ffffff; --surface-2: #f0f2f7; --border: #e3e6ee;
+  --text: #121826; --muted: #5b6478; --accent: #0ea371; --accent-2: #3b6cf6;
+  --accent-soft: #e3f6ee; --code-bg: #0f1424; --code-text: #e6e9f5; --code-border: #1d2440;
+  --warn-bg: #fff6e0; --warn-text: #7a5600; --shadow: 0 1px 2px rgba(18,24,38,.05), 0 8px 24px rgba(18,24,38,.06);
+  --c-kw: #c792ea; --c-str: #9ece6a; --c-com: #6b7694; --c-fn: #7aa2f7; --c-num: #ff9e64;
+}
+:root[data-theme="dark"] {
+  --bg: #0b0f1a; --surface: #121829; --surface-2: #1a2136; --border: #232c45;
+  --text: #e8ebf5; --muted: #9aa4bd; --accent: #2dd4a0; --accent-2: #7aa2f7;
+  --accent-soft: #11302b; --code-bg: #080c17; --code-border: #1b2340;
+  --warn-bg: #2e2410; --warn-text: #f3cf7a; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0f1a; --surface: #121829; --surface-2: #1a2136; --border: #232c45;
+    --text: #e8ebf5; --muted: #9aa4bd; --accent: #2dd4a0; --accent-2: #7aa2f7;
+    --accent-soft: #11302b; --code-bg: #080c17; --code-border: #1b2340;
+    --warn-bg: #2e2410; --warn-text: #f3cf7a; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, kbd { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; }
+:not(pre) > code {
+  background: var(--surface-2); border: 1px solid var(--border); padding: .08em .4em;
+  border-radius: 6px; font-size: .88em;
+}
+
+/* top bar */
+.topbar {
+  position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg) 82%, transparent); border-bottom: 1px solid var(--border);
+}
+.topbar-inner { max-width: 1180px; margin: 0 auto; padding: 0 20px; height: 60px; display: flex; align-items: center; gap: 16px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.brand:hover { text-decoration: none; }
+.logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #10b981, #3b6cf6); display: grid; place-items: center; }
+.logo svg { width: 16px; height: 16px; fill: #fff; }
+.spacer { flex: 1; }
+.toplink { color: var(--muted); font-size: 14px; font-weight: 500; }
+.toplink:hover { color: var(--text); text-decoration: none; }
+.iconbtn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); width: 36px; height: 36px;
+  border-radius: 10px; cursor: pointer; display: grid; place-items: center; font-size: 16px;
+}
+.iconbtn:hover { border-color: var(--accent); }
+.menubtn { display: none; width: auto; padding: 0 12px; font-size: 13px; font-weight: 600; }
+
+/* hero */
+.hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
+.hero::before {
+  content: ""; position: absolute; inset: -40% -10% auto -10%; height: 120%;
+  background: radial-gradient(60% 60% at 25% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+              radial-gradient(50% 50% at 85% 10%, color-mix(in srgb, var(--accent-2) 20%, transparent), transparent 70%);
+  pointer-events: none;
+}
+.hero-inner { position: relative; max-width: 1180px; margin: 0 auto; padding: 72px 20px 64px; display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--warn-text);
+  background: var(--warn-bg); border: 1px solid color-mix(in srgb, var(--warn-text) 25%, transparent); padding: 4px 12px; border-radius: 999px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.08; letter-spacing: -.03em; margin: 18px 0 16px; }
+h1 em { font-style: normal; background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lead { font-size: 19px; color: var(--muted); max-width: 34em; margin: 0 0 28px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 12px; font-weight: 600; font-size: 15px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer;
+}
+.btn:hover { text-decoration: none; border-color: var(--accent); }
+.btn.primary { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--accent-2))); color: #04130d; border-color: transparent; }
+.installbox {
+  margin-top: 26px; display: inline-flex; align-items: center; gap: 12px; background: var(--code-bg); color: var(--code-text);
+  border: 1px solid var(--code-border); border-radius: 12px; padding: 10px 12px 10px 16px; font-size: 14px; max-width: 100%;
+}
+.installbox code { overflow-x: auto; white-space: nowrap; background: none; border: 0; padding: 0; color: inherit; font-size: 14px; }
+.installbox .prompt { color: var(--accent); }
+
+/* hero diagram */
+.diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 22px; box-shadow: var(--shadow); }
+.diagram svg { width: 100%; height: auto; display: block; }
+.diagram .cap { text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px; }
+.node { fill: var(--surface-2); stroke: var(--border); }
+.node-t { fill: var(--text); font: 600 13px system-ui, sans-serif; }
+.node-s { fill: var(--muted); font: 12px system-ui, sans-serif; }
+.wire { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 5; animation: flow 1.2s linear infinite; }
+.frame { fill: var(--code-bg); stroke: var(--code-border); }
+.frame-t { fill: var(--code-text); font: 11px ui-monospace, Menlo, monospace; }
+@keyframes flow { to { stroke-dashoffset: -20; } }
+@media (prefers-reduced-motion: reduce) { .wire { animation: none; } html { scroll-behavior: auto; } }
+
+/* layout */
+.layout { max-width: 1180px; margin: 0 auto; padding: 0 20px; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 56px; }
+.side { position: sticky; top: 76px; align-self: start; padding: 36px 0; max-height: calc(100vh - 76px); overflow-y: auto; }
+.side h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.side a { display: block; padding: 6px 12px; margin-left: -12px; border-radius: 8px; color: var(--muted); font-size: 14.5px; font-weight: 500; border-left: 2px solid transparent; }
+.side a:hover { color: var(--text); text-decoration: none; background: var(--surface-2); }
+.side a.active { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); }
+main { padding: 36px 0 80px; min-width: 0; }
+section { padding: 8px 0 28px; }
+section + section { border-top: 1px solid var(--border); padding-top: 40px; margin-top: 12px; }
+h2 { font-size: 28px; letter-spacing: -.02em; margin: 0 0 14px; }
+h3 { font-size: 19px; margin: 28px 0 8px; letter-spacing: -.01em; }
+p { margin: 0 0 14px; }
+ul { padding-left: 22px; margin: 0 0 14px; }
+li { margin: 4px 0; }
+
+/* cards */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 18px 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; box-shadow: var(--shadow); }
+.card .ic { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 18px; margin-bottom: 10px; }
+.card h3 { margin: 0 0 4px; font-size: 16px; }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+/* code */
+.code { position: relative; margin: 14px 0 20px; border-radius: 14px; background: var(--code-bg); border: 1px solid var(--code-border); box-shadow: var(--shadow); overflow: hidden; }
+.code-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px 8px 16px; border-bottom: 1px solid var(--code-border); color: #8a94b3; font-size: 12.5px; }
+.code pre { margin: 0; padding: 16px; overflow-x: auto; color: var(--code-text); font-size: 13.5px; line-height: 1.6; tab-size: 4; }
+.copy { background: transparent; color: #8a94b3; border: 1px solid var(--code-border); border-radius: 8px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.copy:hover { color: #fff; border-color: #3a4573; }
+.k { color: var(--c-kw); } .s { color: var(--c-str); } .c { color: var(--c-com); font-style: italic; } .f { color: var(--c-fn); } .n { color: var(--c-num); }
+
+/* tables */
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); margin: 14px 0 20px; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { background: var(--surface-2); font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.b-done { background: var(--accent-soft); color: var(--accent); }
+.b-next { background: color-mix(in srgb, var(--accent-2) 16%, transparent); color: var(--accent-2); }
+.b-plan { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+
+.note { border: 1px solid color-mix(in srgb, var(--accent-2) 35%, var(--border)); background: color-mix(in srgb, var(--accent-2) 8%, var(--surface)); border-radius: 14px; padding: 14px 16px; margin: 16px 0; }
+.note.warn { border-color: color-mix(in srgb, var(--warn-text) 35%, var(--border)); background: var(--warn-bg); color: var(--warn-text); }
+.note strong:first-child { display: block; margin-bottom: 2px; }
+
+footer { border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+footer div { max-width: 1180px; margin: 0 auto; padding: 24px 20px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+@media (max-width: 900px) {
+  .hero-inner { grid-template-columns: 1fr; padding-top: 48px; }
+  .layout { grid-template-columns: 1fr; gap: 0; }
+  .side { display: none; position: fixed; inset: 60px 0 0 0; z-index: 15; background: var(--bg); padding: 20px; max-height: none; }
+  .side.open { display: block; }
+  .menubtn { display: grid; }
+  .toplink.hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top" aria-label="go-ocpp-sdk home">
+      <span class="logo"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span>
+      go-ocpp-sdk
+    </a>
+    <span class="spacer"></span>
+    <a class="toplink hide-sm" href="#quickstart">Quick start</a>
+    <a class="toplink hide-sm" href="#status">Status</a>
+    <a class="toplink" href="https://github.com/foecum/go-ocpp-sdk">GitHub</a>
+    <button class="iconbtn" id="theme" aria-label="Toggle colour theme" title="Toggle theme" style="width:auto;padding:0 12px;font-size:13px;font-weight:600">Theme</button>
+    <button class="iconbtn menubtn" id="menu" aria-label="Open navigation">Menu</button>
+  </div>
+</header>
+
+<div class="hero" id="top">
+  <div class="hero-inner">
+    <div>
+      <span class="pill"><span class="dot"></span> Pre-alpha · Phase 1 of 10 complete</span>
+      <h1>Talk <em>OCPP</em> from Go.</h1>
+      <p class="lead">An SDK for the Open Charge Point Protocol, the language EV charging stations speak to their central system. Both roles, JSON over WebSocket, built on the standard library.</p>
+      <div class="cta">
+        <a class="btn primary" href="#quickstart">Get started</a>
+        <a class="btn" href="https://github.com/foecum/go-ocpp-sdk">View on GitHub</a>
+      </div>
+      <div class="installbox"><span class="prompt">$</span><code>go get github.com/foecum/go-ocpp-sdk</code><button class="copy" data-copy="go get github.com/foecum/go-ocpp-sdk">Copy</button></div>
+    </div>
+    <div class="diagram" aria-hidden="true">
+      <svg viewBox="0 0 440 250">
+        <rect class="node" x="14" y="70" width="120" height="86" rx="14"/>
+        <text class="node-t" x="74" y="105" text-anchor="middle">Charging</text>
+        <text class="node-t" x="74" y="122" text-anchor="middle">Station</text>
+        <text class="node-s" x="74" y="141" text-anchor="middle">client</text>
+        <rect class="node" x="306" y="70" width="120" height="86" rx="14"/>
+        <text class="node-t" x="366" y="105" text-anchor="middle">CSMS</text>
+        <text class="node-s" x="366" y="123" text-anchor="middle">central system</text>
+        <text class="node-s" x="366" y="141" text-anchor="middle">server</text>
+        <line class="wire" x1="134" y1="96" x2="306" y2="96"/>
+        <line class="wire" x1="306" y1="130" x2="134" y2="130" style="animation-direction: reverse"/>
+        <rect class="frame" x="110" y="14" width="220" height="34" rx="8"/>
+        <text class="frame-t" x="220" y="35" text-anchor="middle">[2,"id","Heartbeat",{}]</text>
+        <rect class="frame" x="90" y="196" width="260" height="34" rx="8"/>
+        <text class="frame-t" x="220" y="217" text-anchor="middle">[3,"id",{"status":"Accepted"}]</text>
+        <line x1="220" y1="48" x2="220" y2="86" stroke="var(--border)" stroke-dasharray="3 4"/>
+        <line x1="220" y1="140" x2="220" y2="196" stroke="var(--border)" stroke-dasharray="3 4"/>
+      </svg>
+      <div class="cap">OCPP-J frames over a WebSocket</div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="side" id="side" aria-label="Documentation">
+    <h4>Guide</h4>
+    <a href="#overview">Overview</a>
+    <a href="#install">Install</a>
+    <a href="#concepts">Core concepts</a>
+    <a href="#quickstart">Quick start</a>
+    <a href="#frames">Working with frames</a>
+    <a href="#errors">Errors</a>
+    <a href="#versions">Versions &amp; CALLERROR codes</a>
+    <a href="#status">Status &amp; roadmap</a>
+    <a href="#contributing">Contributing</a>
+  </nav>
+
+  <main>
+    <section id="overview">
+      <h2>Overview</h2>
+      <p>OCPP (Open Charge Point Protocol) is the open standard that charging stations use to talk to the back office that manages them. <code>go-ocpp-sdk</code> lets you build either side: a <strong>Charge Point / Charging Station</strong> (client) or a <strong>Central System / CSMS</strong> (server).</p>
+      <div class="grid">
+        <div class="card"><div class="ic">⚡</div><h3>Both roles</h3><p>One SDK for charging stations and for the central system that manages them.</p></div>
+        <div class="card"><div class="ic">🔌</div><h3>OCPP-J only</h3><p>JSON over WebSocket. SOAP (OCPP-S) is intentionally not implemented.</p></div>
+        <div class="card"><div class="ic">🧩</div><h3>Few dependencies</h3><p>Standard library first. Transport and message packages arrive in later phases.</p></div>
+        <div class="card"><div class="ic">🧪</div><h3>Tested hard</h3><p>At least 95% coverage per package, all critical paths covered, tests run with <code>-race</code>.</p></div>
+      </div>
+      <div class="note warn"><strong>Pre-alpha</strong>The OCPP 1.6 message types, WebSocket transport and the high-level <code>chargepoint</code> / <code>csms</code> APIs are not written yet. What exists today is the protocol core described below, and its API may still change.</div>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go get github.com/foecum/go-ocpp-sdk@latest</code></pre></div>
+      <p>Requires a recent Go toolchain (the module targets Go 1.27). Import the root package and the framing package:</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">import (
+	ocpp "github.com/foecum/go-ocpp-sdk"
+	"github.com/foecum/go-ocpp-sdk/ocppj"
+)</code></pre></div>
+    </section>
+
+    <section id="concepts">
+      <h2>Core concepts</h2>
+      <div class="tablewrap"><table>
+        <tr><th>Piece</th><th>Package</th><th>What it does</th></tr>
+        <tr><td><code>ocpp.Request</code> / <code>Response</code></td><td><code>ocpp</code></td><td>A message payload. Reports its <code>Action()</code> and checks itself with <code>Validate()</code>.</td></tr>
+        <tr><td><code>ocpp.Feature</code></td><td><code>ocpp</code></td><td>Binds an action name (e.g. <code>"Heartbeat"</code>) to its request and response types. Build one with <code>ocpp.NewFeature</code>.</td></tr>
+        <tr><td><code>ocppj.Registry</code></td><td><code>ocppj</code></td><td>The set of features for one OCPP version. Decodes and validates payloads.</td></tr>
+        <tr><td><code>ocppj.Parse</code> / <code>Marshal</code></td><td><code>ocppj</code></td><td>Convert between wire frames and <code>Call</code>, <code>CallResult</code>, <code>CallError</code>.</td></tr>
+        <tr><td><code>ocppj.Endpoint</code></td><td><code>ocppj</code></td><td>One side of a connection. Sends calls one at a time, matches replies, times out, and dispatches incoming calls to your handler.</td></tr>
+      </table></div>
+      <p>An <code>Endpoint</code> does no network I/O itself. The transport gives it a <code>Send</code> function and passes every received frame to <code>HandleFrame</code>. That keeps it independent of the WebSocket library, and makes it easy to test in memory.</p>
+    </section>
+
+    <section id="quickstart">
+      <h2>Quick start</h2>
+      <p>This runs a charging station and a CSMS in one process, connected back to back. It uses a made-up <code>Ping</code> message so it works today; the real OCPP messages will plug in the same way.</p>
+      <div class="code"><div class="code-head"><span>main.go</span><button class="copy">Copy</button></div><pre><code class="lang-go">package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+
+	ocpp "github.com/foecum/go-ocpp-sdk"
+	"github.com/foecum/go-ocpp-sdk/ocppj"
+)
+
+// 1. Describe a message: a request and a response type.
+type PingRequest struct {
+	Message string `json:"message"`
+}
+
+func (PingRequest) Action() string { return "Ping" }
+func (r PingRequest) Validate() error {
+	if r.Message == "" {
+		return ocpp.Required("message")
+	}
+	return nil
+}
+
+type PingResponse struct {
+	Reply string `json:"reply"`
+}
+
+func (PingResponse) Action() string  { return "Ping" }
+func (PingResponse) Validate() error { return nil }
+
+// 2. Register it for an OCPP version.
+func newRegistry() *ocppj.Registry {
+	feature, err := ocpp.NewFeature(PingRequest{}, PingResponse{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	reg := ocppj.NewRegistry(ocpp.V201)
+	if err := reg.Register(feature); err != nil {
+		log.Fatal(err)
+	}
+	return reg
+}
+
+func main() {
+	var station, csms *ocppj.Endpoint
+
+	// 3. Create the endpoints. Send is where your WebSocket write goes.
+	station, _ = ocppj.NewEndpoint(ocppj.Config{
+		Registry: newRegistry(),
+		Send: func(ctx context.Context, frame []byte) error {
+			csms.HandleFrame(frame) // a real transport writes to the socket
+			return nil
+		},
+	})
+	csms, _ = ocppj.NewEndpoint(ocppj.Config{
+		Registry: newRegistry(),
+		Send: func(ctx context.Context, frame []byte) error {
+			station.HandleFrame(frame)
+			return nil
+		},
+		// 4. Handle incoming calls.
+		Handler: func(ctx context.Context, req ocpp.Request) (ocpp.Response, error) {
+			ping := req.(*PingRequest)
+			return &PingResponse{Reply: "pong: " + ping.Message}, nil
+		},
+	})
+	defer station.Close()
+	defer csms.Close()
+
+	// 5. Make a call and handle the outcomes.
+	resp, err := station.Call(context.Background(), PingRequest{Message: "hello"})
+	var callErr *ocpp.CallError
+	switch {
+	case errors.Is(err, ocpp.ErrTimeout):
+		log.Fatal("no answer")
+	case errors.As(err, &amp;callErr):
+		log.Fatalf("peer said %s", callErr.Code)
+	case err != nil:
+		log.Fatal(err)
+	}
+	fmt.Println(resp.(*PingResponse).Reply) // pong: hello
+}</code></pre></div>
+      <h3>How a call behaves</h3>
+      <ul>
+        <li>Only <strong>one CALL is outstanding</strong> per direction; further calls from other goroutines wait in a queue (default 1000, then <code>ocpp.ErrQueueFull</code>).</li>
+        <li>The response timeout defaults to <strong>30 s</strong>, counted from when the call is sent. Set <code>Config.Timeout</code> to change it.</li>
+        <li>If your <code>context</code> ends, <code>Call</code> returns <code>ctx.Err()</code> and the next queued call proceeds.</li>
+        <li>Incoming calls run in their own goroutine, so a handler may itself call the peer.</li>
+        <li>With no <code>Handler</code>, or for an action the registry doesn't know, the peer receives a <code>NotImplemented</code> CALLERROR.</li>
+        <li><code>Close()</code> fails everything pending with <code>ocpp.ErrClosed</code>, cancels running handlers and waits for them.</li>
+      </ul>
+    </section>
+
+    <section id="frames">
+      <h2>Working with frames</h2>
+      <p>Use <code>Parse</code> and <code>Marshal</code> directly if you only need the wire format:</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">msg, err := ocppj.Parse(ocpp.V16, []byte(`[2,"19223201","Heartbeat",{}]`))
+if err != nil {
+	var pe *ocppj.ParseError
+	if errors.As(err, &amp;pe) &amp;&amp; pe.ShouldReply() {
+		// send a CALLERROR with pe.ID and pe.Code
+	}
+	return
+}
+call := msg.(*ocppj.Call) // call.Action == "Heartbeat"
+
+frame, _ := ocppj.Marshal(&amp;ocppj.CallResult{
+	UniqueID: call.UniqueID,
+	Payload:  []byte(`{"currentTime":"2026-01-01T00:00:00Z"}`),
+})</code></pre></div>
+      <ul>
+        <li>Message IDs are at most 36 characters; <code>ocppj.NewUUIDGenerator()</code> makes random UUIDs.</li>
+        <li>If a frame's ID can't be read, the reply uses ID <code>"-1"</code>, as the 2.0.1 spec requires.</li>
+        <li>A <code>null</code> payload is accepted and treated as <code>{}</code>.</li>
+        <li>Unknown message types get <code>MessageTypeNotSupported</code> in 2.0.1 and 2.1, and are ignored in 1.6.</li>
+      </ul>
+    </section>
+
+    <section id="errors">
+      <h2>Errors</h2>
+      <p>Branch on these with <code>errors.Is</code> / <code>errors.As</code>. Library code never panics on bad input.</p>
+      <div class="tablewrap"><table>
+        <tr><th>Error</th><th>Meaning</th></tr>
+        <tr><td><code>ocpp.ErrTimeout</code></td><td>No response arrived in time.</td></tr>
+        <tr><td><code>ocpp.ErrNotConnected</code></td><td>There is no connection to send on (returned by transports).</td></tr>
+        <tr><td><code>ocpp.ErrValidation</code></td><td>A message failed validation. <code>*ocpp.ValidationError</code> names the field and whether it is missing.</td></tr>
+        <tr><td><code>ocpp.ErrCallError</code></td><td>The peer replied with a CALLERROR. Use <code>errors.As</code> with <code>*ocpp.CallError</code> for the code, description and details.</td></tr>
+        <tr><td><code>ocpp.ErrQueueFull</code></td><td>Too many calls are already waiting.</td></tr>
+        <tr><td><code>ocpp.ErrClosed</code></td><td>The endpoint was closed.</td></tr>
+        <tr><td><code>ocpp.ErrUnknownAction</code></td><td>No feature is registered for that action.</td></tr>
+      </table></div>
+      <p>Handlers can return an <code>*ocpp.CallError</code> to choose the CALLERROR sent to the peer; any other error becomes <code>InternalError</code>. Invalid incoming payloads are answered automatically with the right code (<code>TypeConstraintViolation</code>, <code>PropertyConstraintViolation</code>, an occurrence violation for missing fields, or a format violation).</p>
+    </section>
+
+    <section id="versions">
+      <h2>Versions &amp; CALLERROR codes</h2>
+      <p>The version constants double as WebSocket subprotocol names.</p>
+      <div class="tablewrap"><table>
+        <tr><th>Constant</th><th>Value</th><th>Notes</th></tr>
+        <tr><td><code>ocpp.V16</code></td><td><code>ocpp1.6</code></td><td>First target</td></tr>
+        <tr><td><code>ocpp.V201</code></td><td><code>ocpp2.0.1</code></td><td>Phase 8</td></tr>
+        <tr><td><code>ocpp.V21</code></td><td><code>ocpp2.1</code></td><td>Later, optional</td></tr>
+      </table></div>
+      <div class="note"><strong>Spelling differs between versions</strong>OCPP 1.6 uses <code>FormationViolation</code> and <code>OccurenceConstraintViolation</code> (sic); 2.0.1 and 2.1 use <code>FormatViolation</code> and <code>OccurrenceConstraintViolation</code>, and add <code>MessageTypeNotSupported</code> and <code>RpcFrameworkError</code>. <code>ErrorCode.IsValid(version)</code> checks a code against the right set.</div>
+    </section>
+
+    <section id="status">
+      <h2>Status &amp; roadmap</h2>
+      <div class="tablewrap"><table>
+        <tr><th>Phase</th><th>Scope</th><th>State</th></tr>
+        <tr><td>0</td><td>Project setup, CI</td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>1</td><td>Core: <code>ocpp</code>, <code>ocppj</code> (framing, registry, call tracking)</td><td><span class="badge b-done">Done</span></td></tr>
+        <tr><td>2</td><td>WebSocket transport, security profiles 1–3</td><td><span class="badge b-next">Next</span></td></tr>
+        <tr><td>3</td><td>OCPP 1.6 types and Core profile messages</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>4</td><td>High-level <code>chargepoint/v16</code> and <code>csms/v16</code></td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>5–6</td><td>Remaining 1.6 profiles, examples, v0.1.0</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>7–8</td><td>1.6 security extension, OCPP 2.0.1</td><td><span class="badge b-plan">Planned</span></td></tr>
+        <tr><td>9–10</td><td>Hardening, OCPP 2.1</td><td><span class="badge b-plan">Planned</span></td></tr>
+      </table></div>
+      <h3>Supported messages</h3>
+      <p>No OCPP messages are implemented yet. This table will list each message and version as the phases land.</p>
+    </section>
+
+    <section id="contributing">
+      <h2>Contributing</h2>
+      <p>Run these after every change; CI runs them too.</p>
+      <div class="code"><div class="code-head"><span>shell</span><button class="copy">Copy</button></div><pre><code class="lang-sh">go build ./...
+go vet ./...
+go test -race ./...
+scripts/coverage.sh   # fails if any package is below 95% coverage</code></pre></div>
+      <p>The specifications this SDK follows are in <code>docs/spec/</code> in the repository. Project rules, layout and the full roadmap are in <a href="https://github.com/foecum/go-ocpp-sdk/blob/main/AGENTS.md">AGENTS.md</a>. Code is released under the <a href="https://github.com/foecum/go-ocpp-sdk/blob/main/LICENSE">MIT licence</a>.</p>
+    </section>
+  </main>
+</div>
+
+<footer><div><span>go-ocpp-sdk · MIT licence</span><span>OCPP is a standard of the Open Charge Alliance. This project is not affiliated with it.</span></div></footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem("theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  document.getElementById("theme").addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") === "dark" ||
+      (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("theme", next); } catch (e) {}
+  });
+
+  var side = document.getElementById("side");
+  document.getElementById("menu").addEventListener("click", function () { side.classList.toggle("open"); });
+  side.addEventListener("click", function (e) { if (e.target.tagName === "A") side.classList.remove("open"); });
+
+  // Minimal Go / shell highlighter (input is already HTML-escaped).
+  var KW = /^(package|import|func|return|var|type|struct|if|else|switch|case|defer|go|range|for|nil|true|false|interface|map|chan|const|default)$/;
+  var TOKEN = /(\/\/[^\n]*|#[^\n]*)|("(?:[^"\\\n]|\\.)*"|`[^`]*`)|\b(\d+)\b|\b([A-Za-z_]\w*)(?=\()|\b([A-Za-z_]\w*)\b/g;
+  document.querySelectorAll("pre code").forEach(function (el) {
+    var sh = el.className.indexOf("lang-sh") >= 0;
+    el.innerHTML = el.innerHTML.replace(TOKEN, function (m, com, str, num, fn, id) {
+      if (com) { if (sh && m.charAt(0) !== "#") return m; return '<span class="c">' + m + "</span>"; }
+      if (str) return '<span class="s">' + m + "</span>";
+      if (num) return '<span class="n">' + m + "</span>";
+      if (sh) return m;
+      if (fn) return KW.test(fn) ? '<span class="k">' + m + "</span>" : '<span class="f">' + m + "</span>";
+      if (id && KW.test(id)) return '<span class="k">' + m + "</span>";
+      return m;
+    });
+  });
+
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.getAttribute("data-copy");
+      if (!text) { var pre = b.closest(".code").querySelector("pre"); text = pre.textContent; }
+      var done = function () { var o = b.textContent; b.textContent = "Copied"; setTimeout(function () { b.textContent = o; }, 1400); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, done); else done();
+    });
+  });
+
+  // Highlight the current section in the sidebar.
+  var links = {};
+  side.querySelectorAll("a").forEach(function (a) { links[a.getAttribute("href").slice(1)] = a; });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          Object.keys(links).forEach(function (k) { links[k].classList.remove("active"); });
+          links[en.target.id].classList.add("active");
+        }
+      });
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    Object.keys(links).forEach(function (id) { var s = document.getElementById(id); if (s) io.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>

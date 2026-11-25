@@ -71,6 +71,7 @@ go-ocpp-sdk/
 │   ├── v16/
 │   └── v201/
 ├── internal/               // helpers not part of the public API
+├── site/                   // HTML documentation site (GitHub Pages), see section 10
 ├── examples/
 │   ├── v16/chargepoint/  v16/csms/
 │   └── v201/chargingstation/  v201/csms/
@@ -140,7 +141,10 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 7. Stop and ask the owner when: the spec is unclear, a new dependency is needed,
    the public API of `chargepoint`/`csms` needs to change after it was agreed, or
    a test cannot be made to pass without changing agreed behaviour.
-8. Never delete or weaken a test to make it pass, and never lower the 95% coverage
+8. Keep the documentation site in sync (section 10): any change that adds, removes
+   or alters public API, behaviour, supported messages, configuration, errors or
+   roadmap status MUST update `site/` in the same commit.
+9. Never delete or weaken a test to make it pass, and never lower the 95% coverage
    threshold (section 4).
 
 ## 7. Roadmap
@@ -278,6 +282,7 @@ Record each decision as: date — decision — reason.
 - 2026-11-25 — Validation is hand-written `Validate()` methods on requests/responses, no validator dependency.
 - 2026-11-25 — Framing rules: unreadable message ID is answered with `-1` (2.0.1 OCPP-J 4.2.3); unknown message type gets `MessageTypeNotSupported` in 2.0.1/2.1 and is ignored in 1.6; a `null` payload is accepted and treated as `{}`.
 - 2026-11-25 — `ocppj.Endpoint` is transport-agnostic (the transport passes a `Send` func and feeds `HandleFrame`). Defaults: 30s response timeout counted from send, 1000-call bounded queue. A caller whose context ends frees the outstanding slot (treated like a timeout) so the queue keeps moving; late responses are dropped. Incoming CALLs run in their own goroutine so handlers may call back into the peer.
+- 2026-11-25 — Documentation is a self-contained static site in `site/`, deployed to GitHub Pages by `.github/workflows/pages.yml` (only `site/` is published, never `docs/spec/`). Updating it is part of every change that affects users (section 10) — set by the owner.
 - 2026-11-25 — Version packages named `v16`, `v201`, `v21`; never `v2/`.
 
 ## 9. Known gaps / skipped spec items
@@ -285,3 +290,25 @@ Record each decision as: date — decision — reason.
 List anything not implemented or simplified, with a reason.
 
 - (none yet)
+
+## 10. Documentation site
+
+User-facing documentation is a static HTML site in `site/` (entry point
+`site/index.html`), published to GitHub Pages by `.github/workflows/pages.yml`.
+Only `site/` is published, never `docs/spec/` (the OCA specifications are not ours
+to redistribute).
+
+- **Update `site/` every time a change adds something users need to know**: new or
+  changed public API, new packages, supported messages (keep the supported-messages
+  table accurate), configuration options, error values and how to handle them,
+  security profiles, behaviour changes, and roadmap/status changes. Do it in the
+  same commit as the code, and update README.md accordingly.
+- Every code sample on the site must compile and run against the current API. Check
+  samples before committing (paste into a scratch `main.go`, run, delete it).
+- Document only what exists. Anything planned is labelled "planned" and must not
+  look usable. Bump the status table when a roadmap phase completes.
+- Keep it self-contained: one HTML file plus assets in `site/`, no build step, no
+  external scripts; system fonts only. It must work in light and dark mode and on
+  phone widths.
+- Before merging a docs-only or docs-affecting change, open `site/index.html` in a
+  browser and check it renders correctly.
