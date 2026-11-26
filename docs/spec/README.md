@@ -1,7 +1,12 @@
 # OCPP specifications
 
 Reference material for the SDK. Published by the Open Charge Alliance (OCA) and
-not covered by this repository's MIT licence. Download from
+not covered by this repository's MIT licence: © Open Charge Alliance, made
+available under the Creative Commons Attribution-NoDerivatives 4.0 International
+licence (<https://creativecommons.org/licenses/by-nd/4.0/>). The files here are
+unchanged copies (the schema zips are also extracted, file contents untouched);
+do not edit them. The `go.mod` in this folder keeps them out of the Go module, so
+`go get` does not download them. Download from
 <https://openchargealliance.org/my-oca/ocpp/>. JSON (OCPP-J) only; the SDK does
 not implement SOAP (OCPP-S).
 

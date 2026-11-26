@@ -894,10 +894,23 @@ func main() {
         <li>The charge point identity is the last path segment of the URL (percent-decoded). It must be 1 to 48 characters with no <code>:</code> or <code>/</code>, otherwise the handshake is answered with 400.</li>
         <li>The OCPP version is chosen from the client's <code>Sec-WebSocket-Protocol</code> offer, in the order of <code>ServerConfig.Versions</code>. If nothing matches, the handshake completes without a subprotocol and the connection is closed with code 1002, as OCPP-J requires.</li>
         <li><code>OnFrame</code> receives frames one at a time per connection, in order, so feeding <code>Endpoint.HandleFrame</code> directly is safe. Keep it quick: it holds up that connection's reads.</li>
-        <li>If a charge point connects again under the same identity, the old connection is closed (code 1008, <code>ws.ErrReplaced</code>) and the new one takes over.</li>
+        <li>If a charge point connects again under the same identity, the old connection is closed (code 1008, <code>ws.ErrReplaced</code>) and the new one takes over. The new connection's <code>OnConnect</code> can come before the old one's <code>OnDisconnect</code>; if you track stations by identity, ignore a disconnect whose error matches <code>ws.ErrReplaced</code>.</li>
+        <li>A write is bounded by <code>WriteTimeout</code> (default 10 s); a connection whose write takes longer is closed as stuck. A caller's context is checked before writing but does not interrupt a write in progress, which would close the connection for everyone.</li>
+        <li>Incoming calls from one charge point are handled one at a time, in arrival order; a station that sends more than the queue holds gets <code>GenericError</code>.</li>
         <li><code>Shutdown(ctx)</code> stops accepting, closes every connection with code 1001 and waits. If <code>ctx</code> ends first, the rest are cut.</li>
         <li><code>Conn(id)</code> and <code>IDs()</code> look up and list connected charge points.</li>
       </ul>
+      <h3>One endpoint for every version</h3>
+      <p>A charge point picks its OCPP version in the handshake, so one URL can serve a fleet of 1.6, 2.0.1 and 2.1 stations. Each version has its own CSMS; <code>ws.NewVersionRouter</code> sends every handshake to the CSMS of the first version, in your order, that the station offers. A station that offers none of them reaches the first route, which closes the connection as OCPP-J requires.</p>
+      <div class="code"><div class="code-head"><span>go</span><button class="copy">Copy</button></div><pre><code class="lang-go">router, err := ws.NewVersionRouter(
+	ws.VersionRoute{Version: ocpp.V21, Handler: srv21},  // *csms.CSMS from csms/v21
+	ws.VersionRoute{Version: ocpp.V201, Handler: srv201}, // csms/v201
+	ws.VersionRoute{Version: ocpp.V16, Handler: srv16},   // csms/v16
+)
+if err != nil {
+	log.Fatal(err)
+}
+http.Handle("/ocpp/", router)</code></pre></div>
       <h3>Client</h3>
       <ul>
         <li><code>Run(ctx)</code> connects, reconnects after any failure, and returns when <code>ctx</code> ends or <code>Close()</code> is called. <code>Send</code> returns <code>ocpp.ErrNotConnected</code> while disconnected.</li>

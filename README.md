@@ -250,6 +250,25 @@ example that a Full `SendLocalList` carries an `idTokenInfo` for every entry, th
 `evseId` is greater than 0 where the text says so, and, in 2.1, the V2X curve and
 tariff-condition rules.
 
+## One endpoint for every version
+
+A charge point picks its OCPP version in the WebSocket handshake, so one URL can
+serve a mixed fleet. Each version has its own CSMS; `ws.NewVersionRouter` sends
+every handshake to the CSMS of the first version (in your order) that the station
+offers:
+
+```go
+router, err := ws.NewVersionRouter(
+	ws.VersionRoute{Version: ocpp.V21, Handler: srv21},  // *csms.CSMS from csms/v21
+	ws.VersionRoute{Version: ocpp.V201, Handler: srv201}, // csms/v201
+	ws.VersionRoute{Version: ocpp.V16, Handler: srv16},   // csms/v16
+)
+if err != nil {
+	log.Fatal(err)
+}
+http.Handle("/ocpp/", router)
+```
+
 ## Security profiles
 
 | Profile | Central System | Charging station |

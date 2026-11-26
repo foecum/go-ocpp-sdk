@@ -6,6 +6,30 @@ stable from 1.0.0 on and follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `ws.NewVersionRouter` serves charge points of several OCPP versions (1.6, 2.0.1,
+  2.1) on one URL, routing each handshake to the CSMS of the version it offers.
+- `ws.ServerConfig.WriteTimeout` and `ws.ClientConfig.WriteTimeout` (default
+  `ws.DefaultWriteTimeout`, 10 s); `ocppj.Endpoint.Abort`.
+
+### Fixed
+- Calling `Close` on a charging station from inside one of its handlers (for
+  example on Reset) no longer deadlocks, and a handler that blocks no longer stops
+  the station from reconnecting.
+- `chargepoint/v16.TransactionQueue` retries a message whose answer cannot be
+  decoded or fails validation, instead of dropping it (and the rest of its
+  transaction) at once. `FileStore` syncs the file to disk before replacing it.
+- A caller's context that ends while its message is being written no longer
+  closes the WebSocket for everyone; writes are bounded by the write timeout.
+- The Go module no longer contains the OCPP specification files (about 80 MB).
+
+### Changed
+- Incoming CALLs from a peer are handled one at a time, in the order they arrive;
+  more than the queue size waiting are answered with `GenericError`. Compliant peers
+  send one CALL at a time and see no difference.
+- The next queued call and error replies are no longer written from the
+  transport's read loop.
+
 ## [1.1.0] - 2026-11-26
 
 ### Added

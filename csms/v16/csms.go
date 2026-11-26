@@ -52,6 +52,13 @@ type Config struct {
 	OnConnect func(cp *ChargePoint)
 	// OnDisconnect is called when a connection ends, with the reason (nil for a
 	// normal close).
+	//
+	// When a station reconnects before its old connection has ended, the new
+	// connection replaces the old one: OnConnect for the new connection can come
+	// before OnDisconnect for the old one, whose err then matches ws.ErrReplaced.
+	// If you track stations by identity, ignore that disconnect (or compare cp
+	// with the one CSMS.ChargePoint returns), or a connected station will look
+	// offline.
 	OnDisconnect func(cp *ChargePoint, err error)
 	// Logger receives diagnostics. Default: discard.
 	Logger *slog.Logger
