@@ -83,7 +83,7 @@ func TestCallErrorResponse(t *testing.T) {
 	r := newRig(t, nil)
 	ch := async(func() (ocpp.Response, error) { return r.e.Call(context.Background(), pingReq{Message: "hi"}) })
 	id := r.next(t).ID()
-	r.e.HandleFrame([]byte(fmt.Sprintf(`[4,%q,"NotSupported","no",{"why":1}]`, id)))
+	r.e.HandleFrame(fmt.Appendf(nil, `[4,%q,"NotSupported","no",{"why":1}]`, id))
 	res := get(t, ch)
 	var ce *ocpp.CallError
 	if !errors.Is(res.err, ocpp.ErrCallError) || !errors.As(res.err, &ce) ||
@@ -229,7 +229,7 @@ func TestResponseArrivesDuringSend(t *testing.T) {
 		Registry: newRegistry(t, ocpp.V201),
 		Send: func(_ context.Context, frame []byte) error {
 			m, _ := Parse(ocpp.V201, frame)
-			e.HandleFrame([]byte(fmt.Sprintf(`[3,%q,{"reply":"fast"}]`, m.ID())))
+			e.HandleFrame(fmt.Appendf(nil, `[3,%q,{"reply":"fast"}]`, m.ID()))
 			return nil
 		},
 		Timeout: 20 * time.Millisecond,

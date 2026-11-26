@@ -411,7 +411,7 @@ func TestIncomingSendsKeepTheirOrder(t *testing.T) {
 		}
 	})
 	for i := 0; i < 50; i++ {
-		r.e.HandleFrame([]byte(fmt.Sprintf(`[6,"s%d","Stream",{"id":%d}]`, i, i)))
+		r.e.HandleFrame(fmt.Appendf(nil, `[6,"s%d","Stream",{"id":%d}]`, i, i))
 	}
 	select {
 	case <-done:
@@ -453,7 +453,7 @@ func TestIncomingSendQueueIsBounded(t *testing.T) {
 	r.e.HandleFrame([]byte(`[6,"a","Stream",{"id":0}]`))
 	<-started // the first is in the handler; the queue is empty again
 	for i := 1; i <= 4; i++ {
-		r.e.HandleFrame([]byte(fmt.Sprintf(`[6,"s%d","Stream",{"id":%d}]`, i, i)))
+		r.e.HandleFrame(fmt.Appendf(nil, `[6,"s%d","Stream",{"id":%d}]`, i, i))
 	}
 	close(release)
 	deadline := time.Now().Add(3 * time.Second)
@@ -493,7 +493,7 @@ func TestIncomingCallsAreServedInOrder(t *testing.T) {
 		}
 	})
 	for i := 0; i < 20; i++ {
-		r.e.HandleFrame([]byte(fmt.Sprintf(`[2,"c%d","Ping",{"message":"m%d"}]`, i, i)))
+		r.e.HandleFrame(fmt.Appendf(nil, `[2,"c%d","Ping",{"message":"m%d"}]`, i, i))
 	}
 	for i := 0; i < 20; i++ {
 		if res, ok := r.next(t).(*CallResult); !ok || res.UniqueID != fmt.Sprintf("c%d", i) {

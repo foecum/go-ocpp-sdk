@@ -142,7 +142,7 @@ func (r *rig) expectNone(t testing.TB) {
 }
 
 func (r *rig) respond(id, payload string) {
-	r.e.HandleFrame([]byte(fmt.Sprintf(`[3,%q,%s]`, id, payload)))
+	r.e.HandleFrame(fmt.Appendf(nil, `[3,%q,%s]`, id, payload))
 }
 
 type result struct {

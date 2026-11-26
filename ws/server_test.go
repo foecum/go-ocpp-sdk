@@ -53,7 +53,7 @@ func TestHandshakeAndFrames(t *testing.T) {
 	ctx := context.Background()
 	// Client to server.
 	for i := 0; i < 3; i++ {
-		if err := c.Write(ctx, websocket.MessageText, []byte(fmt.Sprintf("m%d", i))); err != nil {
+		if err := c.Write(ctx, websocket.MessageText, fmt.Appendf(nil, "m%d", i)); err != nil {
 			t.Fatal(err)
 		}
 	}
