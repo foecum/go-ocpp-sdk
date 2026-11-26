@@ -3,6 +3,7 @@ package chargepoint
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
+	"github.com/foecum/go-ocpp-sdk/ocppj"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
 	"github.com/foecum/go-ocpp-sdk/v16/types"
 )
@@ -555,4 +557,70 @@ func TestFileStore(t *testing.T) {
 	defer runQueue(t, q)()
 	_ = q.MeterValues(nil, meter())
 	waitUntil(t, "delivery", func() bool { return q.Len() == 0 })
+}
+
+// An answer the Central System sends that cannot be used (it fails decoding or
+// validation) is a failure to process the message: the message is retried, not
+// dropped at once.
+func TestAnUnusableAnswerIsRetried(t *testing.T) {
+	cp := newFakeCP(true)
+	bad := fmt.Errorf("ocppj: StartTransaction response: %w",
+		&ocppj.DecodeError{Code: ocpp.OccurrenceConstraintViolation, Err: ocpp.Required("idTagInfo")})
+	cp.failures["StartTransaction"] = []error{bad}
+	var dropped []Discarded
+	cfg := fastConfig()
+	cfg.OnDiscard = func(d Discarded) { dropped = append(dropped, d) }
+	q, _ := newTransactionQueue(cp, cfg)
+	defer runQueue(t, q)()
+	tx, _ := q.StartTransaction(start())
+	_ = q.StopTransaction(tx, stop())
+	waitUntil(t, "delivery", func() bool { return q.Len() == 0 })
+	if len(dropped) != 0 {
+		t.Errorf("dropped %+v", dropped)
+	}
+	if got := cp.sent(); len(got) != 3 || got[0] != "StartTransaction" || got[1] != "StartTransaction" || got[2] != "StopTransaction" {
+		t.Errorf("sent %v, want the start twice and then the stop", got)
+	}
+	// After the last attempt an unusable answer drops the message like any failure.
+	cp = newFakeCP(true)
+	cp.failures["MeterValues"] = []error{bad, bad, bad}
+	dropped = nil
+	q, _ = newTransactionQueue(cp, cfg)
+	defer runQueue(t, q)()
+	_ = q.MeterValues(nil, meter())
+	waitUntil(t, "the message to be dealt with", func() bool { return q.Len() == 0 })
+	if len(dropped) != 1 || dropped[0].Attempts != 3 {
+		t.Errorf("dropped %+v", dropped)
+	}
+}
+
+func TestFileStoreSyncFailures(t *testing.T) {
+	// A store in a directory that disappears cannot save, and leaves no temporary file.
+	dir := filepath.Join(t.TempDir(), "gone")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fs := FileStore(filepath.Join(dir, "q.json"))
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.Save(QueueState{}); err == nil {
+		t.Error("saving into a removed directory must fail")
+	}
+	// Renaming onto a directory fails; the temporary file is removed.
+	dir = t.TempDir()
+	target := filepath.Join(dir, "q.json")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := FileStore(target).Save(QueueState{}); err == nil {
+		t.Error("renaming onto a directory must fail")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("a temporary file was left behind: %v", entries)
+	}
+	if err := syncDir(filepath.Join(dir, "missing")); err == nil {
+		t.Error("a missing directory cannot be synced")
+	}
 }

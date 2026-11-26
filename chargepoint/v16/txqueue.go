@@ -13,6 +13,7 @@ import (
 	"time"
 
 	ocpp "github.com/foecum/go-ocpp-sdk"
+	"github.com/foecum/go-ocpp-sdk/ocppj"
 	"github.com/foecum/go-ocpp-sdk/v16/core"
 	"github.com/foecum/go-ocpp-sdk/v16/types"
 )
@@ -66,7 +67,8 @@ type QueuedMessage struct {
 }
 
 // FileStore returns a TransactionStore that keeps the queue in a JSON file,
-// replaced atomically on every save. It survives a restart of the program.
+// replaced atomically and synced to disk on every save. It survives a restart
+// of the program and a power cut.
 func FileStore(path string) TransactionStore { return fileStore(path) }
 
 type fileStore string
@@ -95,7 +97,14 @@ func (f fileStore) Save(st QueueState) error {
 	if err != nil {
 		return err
 	}
+	// The data reaches the disk before the rename, and the rename before Save
+	// returns, so a power cut leaves either the old file or the new one.
 	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())
 		return err
@@ -104,7 +113,24 @@ func (f fileStore) Save(st QueueState) error {
 		os.Remove(tmp.Name())
 		return err
 	}
-	return os.Rename(tmp.Name(), string(f))
+	if err := os.Rename(tmp.Name(), string(f)); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return syncDir(filepath.Dir(string(f)))
+}
+
+// syncDir flushes a directory entry to disk. Systems that cannot sync a
+// directory (Windows) report an error that is ignored: there the rename is
+// already as durable as it gets.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	_ = d.Sync()
+	return nil
 }
 
 // memoryStore keeps nothing: the queue lives and dies with the program.
@@ -453,8 +479,8 @@ func (q *TransactionQueue) deliver(ctx context.Context, m QueuedMessage) error {
 				return ctx.Err()
 			}
 			continue
-		case errors.Is(err, ErrTransactionUnknown) || errors.Is(err, ocpp.ErrValidation):
-			q.drop(m, err) // it can never be delivered
+		case errors.Is(err, ErrTransactionUnknown) || (errors.Is(err, ocpp.ErrValidation) && !isBadAnswer(err)):
+			q.drop(m, err) // our own request is invalid: it can never be delivered
 			return nil
 		}
 		// The Central System failed to process the message.
@@ -469,6 +495,14 @@ func (q *TransactionQueue) deliver(ctx context.Context, m QueuedMessage) error {
 			return ctx.Err()
 		}
 	}
+}
+
+// isBadAnswer reports whether err is about the Central System's answer rather
+// than our request: an answer that cannot be decoded or fails validation is a
+// failure to process the message, which is retried.
+func isBadAnswer(err error) bool {
+	var de *ocppj.DecodeError
+	return errors.As(err, &de)
 }
 
 func sleep(ctx context.Context, d time.Duration) bool {
