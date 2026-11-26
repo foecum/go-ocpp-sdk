@@ -289,6 +289,10 @@ Optional when available: `staticcheck ./...`, `golangci-lint run`.
 - [x] Known gaps closed: spec-text constraints, appendices constants, 1.6 transaction message queue, CSMS `ForEach`
 - [x] Tag `v1.1.0` (ask owner first)
 
+### Maintenance
+- [x] Code and architecture review; all findings fixed (Decisions 2026-11-26)
+- [x] Tag `v1.2.0` (ask owner first)
+
 ## 8. Decisions
 
 Record each decision as: date — decision — reason.

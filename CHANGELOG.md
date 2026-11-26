@@ -6,6 +6,8 @@ stable from 1.0.0 on and follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-26
+
 ### Added
 - `ws.NewVersionRouter` serves charge points of several OCPP versions (1.6, 2.0.1,
   2.1) on one URL, routing each handshake to the CSMS of the version it offers.
