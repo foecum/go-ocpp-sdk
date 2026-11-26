@@ -127,7 +127,8 @@ func (s *Station) onDisconnect(_ *ws.Conn, err error) {
 	s.up = make(chan struct{})
 	s.mu.Unlock()
 	if ep != nil {
-		ep.Close() // fails calls still waiting for the Central System
+		ep.Abort() // fails calls still waiting; handlers finish on their own, so a
+		// handler that calls Close (or blocks) cannot hold up reconnecting
 	}
 	if s.cfg.OnDisconnect != nil {
 		s.cfg.OnDisconnect(err)

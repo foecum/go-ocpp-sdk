@@ -472,3 +472,143 @@ func TestIncomingSendQueueIsBounded(t *testing.T) {
 		t.Errorf("handled %v, want [0 1 2] (4 and 3 dropped)", got)
 	}
 }
+
+// Incoming CALLs are served one at a time, in arrival order.
+func TestIncomingCallsAreServedInOrder(t *testing.T) {
+	var mu sync.Mutex
+	var order []string
+	running, overlap := 0, false
+	r := newRig(t, func(c *Config) {
+		c.Handler = func(_ context.Context, req ocpp.Request) (ocpp.Response, error) {
+			mu.Lock()
+			running++
+			overlap = overlap || running > 1
+			mu.Unlock()
+			time.Sleep(time.Millisecond)
+			mu.Lock()
+			running--
+			order = append(order, req.(*pingReq).Message)
+			mu.Unlock()
+			return pingResp{Reply: "ok"}, nil
+		}
+	})
+	for i := 0; i < 20; i++ {
+		r.e.HandleFrame([]byte(fmt.Sprintf(`[2,"c%d","Ping",{"message":"m%d"}]`, i, i)))
+	}
+	for i := 0; i < 20; i++ {
+		if res, ok := r.next(t).(*CallResult); !ok || res.UniqueID != fmt.Sprintf("c%d", i) {
+			t.Fatalf("reply %d: %#v", i, res)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if overlap {
+		t.Error("two handlers ran at once")
+	}
+	for i, m := range order {
+		if m != fmt.Sprintf("m%d", i) {
+			t.Fatalf("served out of order: %v", order)
+		}
+	}
+}
+
+// A peer that sends more CALLs than the queue holds gets GenericError for the
+// extra ones instead of starting unbounded handlers.
+func TestIncomingCallFloodIsRefused(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	r := newRig(t, func(c *Config) {
+		c.QueueSize = 2
+		c.Handler = func(context.Context, ocpp.Request) (ocpp.Response, error) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			<-release
+			return pingResp{Reply: "ok"}, nil
+		}
+	})
+	r.e.HandleFrame([]byte(`[2,"a","Ping",{"message":"x"}]`))
+	<-started
+	for _, id := range []string{"b", "c", "d"} {
+		r.e.HandleFrame([]byte(`[2,"` + id + `","Ping",{"message":"x"}]`))
+	}
+	if ce, ok := r.next(t).(*CallErrorFrame); !ok || ce.UniqueID != "d" || ce.Code != ocpp.GenericError {
+		t.Fatalf("%#v", ce)
+	}
+	close(release)
+	for _, id := range []string{"a", "b", "c"} {
+		if res, ok := r.next(t).(*CallResult); !ok || res.UniqueID != id {
+			t.Fatalf("want the answer to %s, got %#v", id, res)
+		}
+	}
+	// After Close nothing is queued any more.
+	r.e.Close()
+	r.e.HandleFrame([]byte(`[2,"z","Ping",{"message":"x"}]`))
+	r.expectNone(t)
+}
+
+// Abort fails waiting calls at once and does not wait for running handlers.
+func TestAbortDoesNotWaitForHandlers(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+	r := newRig(t, func(c *Config) {
+		c.Handler = func(ctx context.Context, _ ocpp.Request) (ocpp.Response, error) {
+			close(started)
+			<-release
+			return pingResp{Reply: "ok"}, nil
+		}
+	})
+	r.e.HandleFrame([]byte(`[2,"a","Ping",{"message":"x"}]`))
+	<-started
+	call := async(func() (ocpp.Response, error) { return r.e.Call(context.Background(), pingReq{Message: "y"}) })
+	r.next(t) // our CALL went out
+	aborted := make(chan struct{})
+	go func() { r.e.Abort(); r.e.Abort(); close(aborted) }()
+	select {
+	case <-aborted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Abort waited for the running handler")
+	}
+	if got := get(t, call); !errors.Is(got.err, ocpp.ErrClosed) {
+		t.Errorf("waiting call: %v", got.err)
+	}
+	close(release)
+	r.e.Close() // now waits for the handler, which has been released
+}
+
+// The next queued CALL is written by a goroutine of its own, not by the
+// goroutine that delivered the response (the transport's read loop).
+func TestNextCallIsNotWrittenByTheReader(t *testing.T) {
+	var mu sync.Mutex
+	var writers []int64
+	reader := make(chan int64, 1)
+	r := newRig(t, nil)
+	r.e.send = func(_ context.Context, f []byte) error {
+		mu.Lock()
+		writers = append(writers, goid())
+		mu.Unlock()
+		r.frames <- f
+		return nil
+	}
+	first := async(func() (ocpp.Response, error) { return r.e.Call(context.Background(), pingReq{Message: "1"}) })
+	c1 := r.next(t)
+	second := async(func() (ocpp.Response, error) { return r.e.Call(context.Background(), pingReq{Message: "2"}) })
+	waitQueue(t, r.e, 1)
+	go func() {
+		reader <- goid()
+		r.respond(c1.ID(), `{"reply":"ok"}`)
+	}()
+	readerID := <-reader
+	c2 := r.next(t)
+	r.respond(c2.ID(), `{"reply":"ok"}`)
+	get(t, first)
+	get(t, second)
+	mu.Lock()
+	defer mu.Unlock()
+	for _, w := range writers {
+		if w == readerID {
+			t.Error("the reader goroutine wrote the next CALL")
+		}
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -187,3 +188,12 @@ func waitQueue(t testing.TB, e *Endpoint, n int) {
 }
 
 var errBoom = errors.New("boom")
+
+// goid returns the current goroutine's id, for tests only.
+func goid() int64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	var id int64
+	fmt.Sscanf(string(buf[:n]), "goroutine %d ", &id)
+	return id
+}

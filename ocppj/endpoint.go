@@ -105,6 +105,12 @@ type Endpoint struct {
 	queue   []*pending
 	closed  bool
 
+	// Incoming CALLs are handled one at a time, in arrival order: a peer may
+	// have only one CALL outstanding, so a compliant one never waits, and one
+	// that floods the connection cannot start unbounded handlers.
+	calls      []*Call
+	callActive bool // a goroutine is draining calls
+
 	// Incoming SEND messages are handled one at a time, in arrival order, because
 	// the values of a stream only make sense in order.
 	sends      []*Send
@@ -306,8 +312,10 @@ func (e *Endpoint) release(p *pending) bool {
 	return true
 }
 
-// HandleFrame processes one frame received from the peer. Incoming CALLs are
-// handled in a new goroutine; responses complete the matching Call.
+// HandleFrame processes one frame received from the peer. It never writes to
+// the connection itself, so it may be called from the transport's read loop:
+// incoming CALLs are handled, in order, by a goroutine of their own; responses
+// complete the matching Call.
 func (e *Endpoint) HandleFrame(data []byte) {
 	m, err := Parse(e.reg.Version(), data)
 	if err != nil {
@@ -315,23 +323,13 @@ func (e *Endpoint) HandleFrame(data []byte) {
 		errors.As(err, &pe)
 		e.log.Warn("ocppj: invalid frame", "err", err)
 		if pe.ShouldReply() {
-			e.reply(&CallErrorFrame{UniqueID: pe.ID, Code: pe.Code, Description: pe.Err.Error()})
+			e.spawn(func() { e.reply(&CallErrorFrame{UniqueID: pe.ID, Code: pe.Code, Description: pe.Err.Error()}) })
 		}
 		return
 	}
 	switch m := m.(type) {
 	case *Call:
-		e.mu.Lock()
-		if e.closed {
-			e.mu.Unlock()
-			return
-		}
-		e.wg.Add(1)
-		e.mu.Unlock()
-		go func() {
-			defer e.wg.Done()
-			e.serve(m)
-		}()
+		e.enqueueCall(m)
 	case *Send:
 		e.enqueueSend(m)
 	case *CallResultErrorFrame:
@@ -370,7 +368,67 @@ func (e *Endpoint) complete(id string, result func(*pending) (ocpp.Response, err
 	}
 	e.mu.Unlock()
 	p.finish(result(p))
-	e.pump()
+	e.spawn(e.pump) // the next call is written off the transport's read loop
+}
+
+// spawn runs fn in a goroutine that Close waits for. It does nothing once the
+// endpoint is closed.
+func (e *Endpoint) spawn(fn func()) {
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return
+	}
+	e.wg.Add(1)
+	e.mu.Unlock()
+	go func() {
+		defer e.wg.Done()
+		fn()
+	}()
+}
+
+// enqueueCall queues an incoming CALL for the goroutine that serves them in
+// order. When the queue is full the CALL is refused with GenericError.
+func (e *Endpoint) enqueueCall(c *Call) {
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return
+	}
+	if len(e.calls) >= e.maxQueue {
+		e.mu.Unlock()
+		e.log.Warn("ocppj: refusing CALL, too many waiting", "action", c.Action, "id", c.UniqueID)
+		e.spawn(func() {
+			e.reply(&CallErrorFrame{UniqueID: c.UniqueID, Code: ocpp.GenericError, Description: "too many calls waiting; send one at a time"})
+		})
+		return
+	}
+	e.calls = append(e.calls, c)
+	if e.callActive {
+		e.mu.Unlock()
+		return
+	}
+	e.callActive = true
+	e.wg.Add(1)
+	e.mu.Unlock()
+	go e.drainCalls()
+}
+
+// drainCalls serves the queued CALLs, one after another.
+func (e *Endpoint) drainCalls() {
+	defer e.wg.Done()
+	for {
+		e.mu.Lock()
+		if e.closed || len(e.calls) == 0 {
+			e.calls, e.callActive = nil, false
+			e.mu.Unlock()
+			return
+		}
+		c := e.calls[0]
+		e.calls = e.calls[1:]
+		e.mu.Unlock()
+		e.serve(c)
+	}
 }
 
 // enqueueSend queues an incoming SEND for the goroutine that hands them to the
@@ -421,7 +479,9 @@ func (e *Endpoint) rejectResult(id string, err error) {
 		return
 	}
 	f := e.errorFrame(id, err)
-	e.reply(&CallResultErrorFrame{UniqueID: f.UniqueID, Code: f.Code, Description: f.Description, Details: f.Details})
+	e.spawn(func() {
+		e.reply(&CallResultErrorFrame{UniqueID: f.UniqueID, Code: f.Code, Description: f.Description, Details: f.Details})
+	})
 }
 
 // serveSend decodes an incoming SEND and gives it to the handler. Nothing is
@@ -524,11 +584,23 @@ func (e *Endpoint) reply(m Message) {
 
 // Close fails all pending and queued calls with ocpp.ErrClosed, cancels the
 // context of running handlers and waits for them to return. It is idempotent.
+// Do not call it from a handler of this endpoint, which it would wait for; use
+// Abort there.
 func (e *Endpoint) Close() {
+	e.Abort()
+	e.wg.Wait()
+}
+
+// Abort is Close without the wait: it fails all pending and queued calls with
+// ocpp.ErrClosed and cancels the context of running handlers, which finish on
+// their own (their replies still go to Send, which normally fails by then
+// because the connection is gone). Transports call it when the
+// connection is lost, so a slow handler cannot hold up reconnecting. It is
+// idempotent.
+func (e *Endpoint) Abort() {
 	e.mu.Lock()
 	if e.closed {
 		e.mu.Unlock()
-		e.wg.Wait()
 		return
 	}
 	e.closed = true
@@ -546,5 +618,4 @@ func (e *Endpoint) Close() {
 	for _, p := range doomed {
 		p.finish(nil, ocpp.ErrClosed)
 	}
-	e.wg.Wait()
 }

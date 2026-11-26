@@ -172,7 +172,7 @@ func (s *Server[H]) onDisconnect(c *ws.Conn, err error) {
 		return
 	}
 	e := v.(*entry[H])
-	e.session.ep.Close() // fails calls still waiting for this charge point
+	e.session.ep.Abort() // fails calls still waiting; handlers finish on their own
 	if s.cfg.OnDisconnect != nil {
 		s.cfg.OnDisconnect(e.handle, err)
 	}
