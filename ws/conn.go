@@ -20,6 +20,9 @@ const (
 	DefaultPongTimeout = 10 * time.Second
 	// DefaultReadLimit is the largest accepted message, in bytes.
 	DefaultReadLimit = 1 << 20
+	// DefaultWriteTimeout bounds how long writing one frame may take before the
+	// connection is considered stuck and closed.
+	DefaultWriteTimeout = 10 * time.Second
 	// MaxIDLength is the longest allowed charge point identity (OCPP-J 2.0.1 §3.1.1).
 	MaxIDLength = 48
 )
@@ -32,6 +35,8 @@ type Conn struct {
 	remote  string
 	ws      *websocket.Conn
 
+	writeTimeout time.Duration
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -42,9 +47,9 @@ type Conn struct {
 	closedLocally bool
 }
 
-func newConn(parent context.Context, ws *websocket.Conn, id string, v ocpp.Version, remote string) *Conn {
+func newConn(parent context.Context, ws *websocket.Conn, id string, v ocpp.Version, remote string, writeTimeout time.Duration) *Conn {
 	ctx, cancel := context.WithCancel(parent)
-	return &Conn{id: id, version: v, remote: remote, ws: ws, ctx: ctx, cancel: cancel, done: make(chan struct{})}
+	return &Conn{id: id, version: v, remote: remote, ws: ws, writeTimeout: writeTimeout, ctx: ctx, cancel: cancel, done: make(chan struct{})}
 }
 
 // ID returns the charge point identity.
@@ -71,14 +76,23 @@ func (c *Conn) Err() error {
 // matching ocpp.ErrNotConnected, so Write can be used directly as
 // ocppj.Config.Send.
 //
-// Cancelling ctx while a write is in progress closes the connection.
+// ctx is checked before writing: if it has ended, nothing is sent and its error
+// is returned. A write that has started is not cut short by ctx, because the
+// WebSocket would have to be closed for every other user of the connection;
+// instead it is bounded by the write timeout (DefaultWriteTimeout unless
+// configured), after which the connection is considered stuck and closed.
 func (c *Conn) Write(ctx context.Context, frame []byte) error {
 	select {
 	case <-c.done:
 		return ocpp.ErrNotConnected
 	default:
 	}
-	if err := c.ws.Write(ctx, websocket.MessageText, frame); err != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.writeTimeout)
+	defer cancel()
+	if err := c.ws.Write(wctx, websocket.MessageText, frame); err != nil {
 		select {
 		case <-c.done:
 			return fmt.Errorf("%w: %v", ocpp.ErrNotConnected, err)
@@ -117,6 +131,7 @@ func (c *Conn) setErr(err error) {
 }
 
 type connOptions struct {
+	writeTimeout time.Duration
 	pingInterval time.Duration
 	pongTimeout  time.Duration
 	readLimit    int64

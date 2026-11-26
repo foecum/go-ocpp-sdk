@@ -47,6 +47,9 @@ type ServerConfig struct {
 	PongTimeout time.Duration
 	// ReadLimit is the largest accepted message. Zero selects DefaultReadLimit.
 	ReadLimit int64
+	// WriteTimeout bounds writing one frame; a connection whose write takes
+	// longer is closed. Zero selects DefaultWriteTimeout.
+	WriteTimeout time.Duration
 	// OriginPatterns lists origins allowed to connect from a browser. Charge
 	// points send no Origin header, so this is normally empty.
 	OriginPatterns []string
@@ -89,7 +92,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		cfg.Logger = discardLogger()
 	}
 	s := &Server{cfg: cfg, names: names, conns: make(map[string]*Conn), opts: connOptions{
-		pingInterval: cfg.PingInterval, pongTimeout: cfg.PongTimeout, readLimit: cfg.ReadLimit, log: cfg.Logger,
+		pingInterval: cfg.PingInterval, pongTimeout: cfg.PongTimeout, readLimit: cfg.ReadLimit, writeTimeout: cfg.WriteTimeout, log: cfg.Logger,
 	}}
 	s.opts = s.opts.withDefaults()
 	s.baseCtx, s.baseCancel = context.WithCancel(context.Background())
@@ -105,6 +108,9 @@ func (o connOptions) withDefaults() connOptions {
 	}
 	if o.readLimit <= 0 {
 		o.readLimit = DefaultReadLimit
+	}
+	if o.writeTimeout <= 0 {
+		o.writeTimeout = DefaultWriteTimeout
 	}
 	return o
 }
@@ -183,7 +189,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.afterAccept != nil {
 		s.afterAccept()
 	}
-	c := newConn(s.baseCtx, ws, id, ocpp.Version(ws.Subprotocol()), r.RemoteAddr)
+	c := newConn(s.baseCtx, ws, id, ocpp.Version(ws.Subprotocol()), r.RemoteAddr, s.opts.writeTimeout)
 	s.register(c)
 	if s.cfg.OnConnect != nil {
 		s.cfg.OnConnect(c)

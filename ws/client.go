@@ -54,6 +54,9 @@ type ClientConfig struct {
 	PongTimeout time.Duration
 	// ReadLimit is the largest accepted message. Zero selects DefaultReadLimit.
 	ReadLimit int64
+	// WriteTimeout bounds writing one frame; a connection whose write takes
+	// longer is closed. Zero selects DefaultWriteTimeout.
+	WriteTimeout time.Duration
 	// HandshakeTimeout bounds one connection attempt. Zero selects
 	// DefaultHandshakeTimeout.
 	HandshakeTimeout time.Duration
@@ -110,7 +113,7 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	c := &Client{
 		cfg: cfg, names: names, url: u.JoinPath(cfg.ID).String(), header: http.Header{},
 		http: &http.Client{Transport: tr}, bo: newBackoff(cfg.Reconnect),
-		opts: connOptions{pingInterval: cfg.PingInterval, pongTimeout: cfg.PongTimeout, readLimit: cfg.ReadLimit, log: cfg.Logger}.withDefaults(),
+		opts: connOptions{pingInterval: cfg.PingInterval, pongTimeout: cfg.PongTimeout, readLimit: cfg.ReadLimit, writeTimeout: cfg.WriteTimeout, log: cfg.Logger}.withDefaults(),
 	}
 	if cfg.Password != "" {
 		c.header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(cfg.ID+":"+cfg.Password)))
@@ -184,7 +187,7 @@ func (c *Client) dial(ctx context.Context) (*Conn, error) {
 		_ = ws.Close(websocket.StatusProtocolError, "no common OCPP subprotocol")
 		return nil, ErrNoSubprotocol
 	}
-	return newConn(context.Background(), ws, c.cfg.ID, ocpp.Version(ws.Subprotocol()), c.cfg.URL), nil
+	return newConn(context.Background(), ws, c.cfg.ID, ocpp.Version(ws.Subprotocol()), c.cfg.URL, c.opts.writeTimeout), nil
 }
 
 // serve runs one established connection to its end.
